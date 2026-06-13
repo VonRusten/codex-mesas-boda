@@ -64,6 +64,20 @@ el plano, y las funciones del servidor rechazan cargar o guardar datos sin ella.
 > La contraseña se valida en el backend, así que protege también los datos, no solo
 > la pantalla. Comparte la URL y la contraseña solo con quien deba editar el plano.
 
+## Datos iniciales (tu boda real)
+
+La app **no arranca vacía**: incluye tus datos reales (181 invitados y 12 mesas con
+sus asignaciones) extraídos de la base de datos Excel original. Están en
+`lib/datos-iniciales.js`.
+
+La primera vez que se abre con la nube conectada, el servidor **siembra
+automáticamente** la base de datos en la nube con esos datos (una sola vez, marcado
+con la clave `…:seeded`). A partir de ahí, la nube es la fuente compartida y manda
+sobre los datos iniciales: lo que editéis se guarda y no se vuelve a sobrescribir.
+
+> Si necesitas volver a sembrar desde cero, borra la clave `planificador-mesas-boda`
+> y `planificador-mesas-boda:seeded` en el almacén de Vercel y recarga la app.
+
 ## Uso de la app
 
 - **Añadir invitados**: botón *Añadir invitado*, o importa una lista con el botón

@@ -1370,10 +1370,15 @@
         if (!response.ok || !result.ok) throw new Error(result.error || "No se pudo cargar");
 
         if (result.configured === false) {
-          // Sin nube: usamos lo que haya en este navegador.
+          // Sin nube: priorizamos lo guardado en este navegador y, si no hay
+          // nada, usamos los datos iniciales que manda el servidor.
           cloudEnabled = false;
           if (applyLoadedState(readFromLocalStorage())) {
             render();
+            els.saveStatus.value = "Datos de este equipo";
+          } else if (applyLoadedState(result.state)) {
+            render();
+            saveToLocalStorage();
             els.saveStatus.value = "Datos de este equipo";
           } else {
             els.saveStatus.value = "Listo";
