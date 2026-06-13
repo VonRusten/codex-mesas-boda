@@ -1250,10 +1250,26 @@
     }
 
     const STORAGE_KEY = "planificador-mesas-boda";
+    const AUTH_KEY = "planificador-mesas-boda-pw";
 
     // Indica si el guardado en la nube (Vercel KV) está activo. Se descubre en
     // la primera carga: si no lo está, trabajamos solo con localStorage.
     let cloudEnabled = true;
+
+    // ---- Acceso con contraseña ----
+    function storedPassword() {
+      try { return localStorage.getItem(AUTH_KEY) || ""; } catch { return ""; }
+    }
+    function setStoredPassword(pw) {
+      try { localStorage.setItem(AUTH_KEY, pw); } catch {}
+    }
+    function clearStoredPassword() {
+      try { localStorage.removeItem(AUTH_KEY); } catch {}
+    }
+    function authHeaders() {
+      const pw = storedPassword();
+      return pw ? { "x-planner-password": pw } : {};
+    }
 
     function serializableState() {
       return {
@@ -1316,9 +1332,15 @@
       try {
         const response = await fetch("/api/save", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeaders() },
           body: JSON.stringify(serializableState())
         });
+        if (response.status === 401) {
+          clearStoredPassword();
+          els.saveStatus.value = "Sesión caducada";
+          showLogin("Vuelve a introducir la contraseña.");
+          return;
+        }
         const result = await response.json();
         if (!response.ok || !result.ok) throw new Error(result.error || "No se pudo guardar");
 
@@ -1335,10 +1357,15 @@
       }
     }
 
+    // Devuelve true si la contraseña es válida (datos cargados), false si no.
     async function loadSavedState() {
       els.saveStatus.value = "Cargando...";
       try {
-        const response = await fetch("/api/load");
+        const response = await fetch("/api/load", { headers: authHeaders() });
+        if (response.status === 401) {
+          clearStoredPassword();
+          return false;
+        }
         const result = await response.json();
         if (!response.ok || !result.ok) throw new Error(result.error || "No se pudo cargar");
 
@@ -1351,7 +1378,7 @@
           } else {
             els.saveStatus.value = "Listo";
           }
-          return;
+          return true;
         }
 
         cloudEnabled = true;
@@ -1367,6 +1394,7 @@
         } else {
           els.saveStatus.value = "Listo";
         }
+        return true;
       } catch (error) {
         // Sin conexión con la API: caemos al respaldo local.
         if (applyLoadedState(readFromLocalStorage())) {
@@ -1375,6 +1403,7 @@
         } else {
           els.saveStatus.value = "Listo";
         }
+        return true;
       }
     }
 
@@ -1382,11 +1411,95 @@
       els.saveStatus.value = "Listo";
     }
 
+    // ---- Pantalla de acceso ----
+    let loginEls = null;
+
+    function buildLoginUI() {
+      if (loginEls) return loginEls;
+      const style = document.createElement("style");
+      style.textContent = `
+        .login-overlay {
+          position: fixed; inset: 0; z-index: 9999;
+          display: none; align-items: center; justify-content: center;
+          background: var(--bg, #f6f7f4);
+        }
+        .login-overlay.show { display: flex; }
+        .login-card {
+          background: var(--panel, #fff); border: 1px solid var(--line, #d7ded9);
+          border-radius: 12px; box-shadow: var(--shadow, 0 14px 32px rgba(41,54,48,.12));
+          padding: 28px 26px; width: min(360px, 92vw); text-align: center;
+        }
+        .login-card h1 { font-size: 18px; margin: 0 0 4px; color: var(--ink, #25302c); }
+        .login-card p { margin: 0 0 18px; color: var(--muted, #6f7b76); font-size: 13px; }
+        .login-card input {
+          width: 100%; padding: 11px 12px; border: 1px solid var(--line, #d7ded9);
+          border-radius: 8px; margin-bottom: 12px; text-align: center;
+        }
+        .login-card button {
+          width: 100%; padding: 11px 12px; border: none; border-radius: 8px;
+          background: var(--accent, #2f7d68); color: #fff; cursor: pointer; font-weight: 600;
+        }
+        .login-card button:hover { filter: brightness(1.05); }
+        .login-error { color: var(--danger, #b13434); font-size: 13px; min-height: 18px; margin-top: 10px; }
+      `;
+      document.head.appendChild(style);
+
+      const overlay = document.createElement("div");
+      overlay.className = "login-overlay";
+      overlay.innerHTML = `
+        <form class="login-card" autocomplete="off">
+          <h1>Planificador de mesas de boda</h1>
+          <p>Introduce la contraseña para acceder</p>
+          <input type="password" name="pw" placeholder="Contraseña" aria-label="Contraseña" autofocus>
+          <button type="submit">Entrar</button>
+          <div class="login-error" role="alert"></div>
+        </form>`;
+      document.body.appendChild(overlay);
+
+      const form = overlay.querySelector("form");
+      const input = overlay.querySelector("input");
+      const error = overlay.querySelector(".login-error");
+
+      form.addEventListener("submit", async event => {
+        event.preventDefault();
+        const pw = input.value.trim();
+        if (!pw) return;
+        error.textContent = "";
+        setStoredPassword(pw);
+        const ok = await loadSavedState();
+        if (ok) {
+          hideLogin();
+        } else {
+          clearStoredPassword();
+          error.textContent = "Contraseña incorrecta.";
+          input.select();
+        }
+      });
+
+      loginEls = { overlay, input, error };
+      return loginEls;
+    }
+
+    function showLogin(message) {
+      const ui = buildLoginUI();
+      ui.error.textContent = message || "";
+      ui.overlay.classList.add("show");
+      ui.input.value = "";
+      ui.input.focus();
+    }
+
+    function hideLogin() {
+      if (loginEls) loginEls.overlay.classList.remove("show");
+    }
+
     async function initializeApp() {
       render();
       initializeSaveStatus();
       setupColumnNavigation();
-      await loadSavedState();
+      buildLoginUI();
+      // Si ya hay una contraseña guardada, intentamos entrar directamente.
+      const ok = storedPassword() ? await loadSavedState() : false;
+      if (!ok) showLogin();
     }
 
     function setupColumnNavigation() {

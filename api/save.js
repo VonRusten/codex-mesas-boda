@@ -1,8 +1,14 @@
 import { isConfigured, writeState } from "../lib/kv.js";
+import { isAuthorized, unauthorized } from "../lib/auth.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ ok: false, error: "Método no permitido" });
+    return;
+  }
+
+  if (!isAuthorized(req)) {
+    unauthorized(res);
     return;
   }
 

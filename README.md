@@ -51,8 +51,18 @@ que el plano se **comparta entre personas**, conecta la base de datos (paso 3).
 ¡Listo! A partir de ahora todos los cambios se guardan en la nube y todo el mundo
 que abra la URL verá el mismo plano.
 
-> Consejo: comparte la URL de Vercel solo con quien quieras que edite, ya que
-> cualquiera con el enlace puede modificar el plano.
+### Contraseña de acceso
+
+La app está protegida con una contraseña: al abrir la URL se pide antes de mostrar
+el plano, y las funciones del servidor rechazan cargar o guardar datos sin ella.
+
+- Contraseña por defecto: **`MartayCarlos`**.
+- Para cambiarla sin tocar el código, define la variable de entorno
+  `PLANNER_PASSWORD` en Vercel (*Project Settings → Environment Variables*) y vuelve
+  a desplegar.
+
+> La contraseña se valida en el backend, así que protege también los datos, no solo
+> la pantalla. Comparte la URL y la contraseña solo con quien deba editar el plano.
 
 ## Uso de la app
 
