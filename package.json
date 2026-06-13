@@ -1,0 +1,14 @@
+{
+  "name": "planificador-mesas-boda",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Planificador visual de mesas de boda con plano interactivo y almacenamiento compartido en la nube. Listo para desplegar en Vercel.",
+  "scripts": {
+    "dev": "vercel dev",
+    "start": "vercel dev"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

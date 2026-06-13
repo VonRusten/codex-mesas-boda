@@ -1,0 +1,15 @@
+# Dependencias
+node_modules/
+
+# Vercel
+.vercel/
+
+# Variables de entorno (NUNCA subir secretos)
+.env
+.env.local
+.env*.local
+
+# Sistema
+.DS_Store
+Thumbs.db
+*.log

@@ -1,0 +1,2229 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Planificador de mesas de boda</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg: #f6f7f4;
+      --panel: #ffffff;
+      --panel-2: #eef5f1;
+      --ink: #25302c;
+      --muted: #6f7b76;
+      --line: #d7ded9;
+      --accent: #2f7d68;
+      --accent-2: #b85c38;
+      --danger: #b13434;
+      --warn-bg: #fff0df;
+      --seat: #fdfdfb;
+      --shadow: 0 14px 32px rgba(41, 54, 48, .12);
+      --radius: 8px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      min-height: 36px;
+      border-radius: 7px;
+      padding: 0 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      justify-content: center;
+      transition: border-color .15s ease, background .15s ease, transform .15s ease;
+    }
+
+    button:hover {
+      border-color: #9fb5ac;
+      background: #f9fbfa;
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .78);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      transition: padding .18s ease, gap .18s ease;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.1;
+      letter-spacing: 0;
+      transition: font-size .18s ease;
+    }
+
+    .brand p {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      transition: opacity .18s ease, max-height .18s ease, margin .18s ease;
+      max-height: 22px;
+      overflow: hidden;
+    }
+
+    body.topbar-compact .topbar {
+      padding: 8px 18px;
+      gap: 10px;
+    }
+
+    body.topbar-compact .brand h1 {
+      font-size: 17px;
+    }
+
+    body.topbar-compact .brand p {
+      opacity: 0;
+      max-height: 0;
+      margin: 0;
+    }
+
+    body.topbar-compact .toolbar button {
+      min-height: 31px;
+      padding: 0 10px;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      align-items: center;
+    }
+
+    .file-input {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .file-input input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(380px, 1fr) minmax(420px, var(--map-panel-width, 1fr));
+      gap: 18px;
+      padding: 18px;
+      align-items: start;
+    }
+
+    .layout.map-collapsed {
+      grid-template-columns: minmax(0, 1fr) 72px;
+    }
+
+    .layout.map-collapsed .canvas-shell {
+      overflow: hidden;
+      min-height: calc(100vh - 110px);
+    }
+
+    .layout.map-collapsed .canvas-shell .controls,
+    .layout.map-collapsed .canvas-shell .summary,
+    .layout.map-collapsed .canvas-shell .map-wrap,
+    .layout.map-collapsed .canvas-shell .panel-header small {
+      display: none;
+    }
+
+    .layout.map-collapsed .canvas-shell .panel-header {
+      min-height: calc(100vh - 110px);
+      padding: 10px;
+      writing-mode: vertical-rl;
+      justify-content: flex-start;
+    }
+
+    .layout.map-collapsed .canvas-shell .panel-header h2 {
+      font-size: 14px;
+    }
+
+    .layout.map-fullscreen {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .layout.map-fullscreen .organizer {
+      display: none;
+    }
+
+    .layout.map-fullscreen .canvas-shell {
+      min-height: calc(100vh - 110px);
+    }
+
+    .layout.map-fullscreen .room-stage {
+      width: 100%;
+    }
+
+    .layout.map-fullscreen .map-wrap {
+      min-height: calc(100vh - 260px);
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      min-width: 0;
+    }
+
+    .panel-header {
+      min-height: 58px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .panel-header h2 {
+      margin: 0;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    .panel-header small {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .organizer {
+      min-height: calc(100vh - 110px);
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .search-row {
+      padding: 12px 14px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfcfb;
+    }
+
+    .field {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .field label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      white-space: nowrap;
+    }
+
+    .field input,
+    .field select {
+      min-height: 36px;
+      border-radius: 7px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      padding: 0 10px;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .columns {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(292px, 340px);
+      gap: 12px;
+      overflow: auto;
+      padding: 14px;
+      align-items: stretch;
+      height: calc(100vh - 190px);
+      min-height: 420px;
+      cursor: grab;
+      scroll-behavior: smooth;
+      scrollbar-gutter: stable;
+      user-select: none;
+    }
+
+    body.topbar-compact .columns {
+      height: calc(100vh - 156px);
+    }
+
+    .columns.is-panning {
+      cursor: grabbing;
+      scroll-behavior: auto;
+    }
+
+    .columns input,
+    .columns select,
+    .columns button,
+    .columns .guest-card {
+      user-select: text;
+    }
+
+    .column {
+      background: var(--panel-2);
+      border: 1px solid #d8e7df;
+      border-radius: var(--radius);
+      min-height: 360px;
+      max-height: 100%;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+    }
+
+    .column.unassigned-column {
+      position: sticky;
+      left: 14px;
+      z-index: 8;
+      box-shadow: 10px 0 18px rgba(41, 54, 48, .12);
+    }
+
+    .column.is-drop {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .column-head {
+      padding: 10px;
+      border-bottom: 1px solid #d8e7df;
+      display: grid;
+      gap: 8px;
+    }
+
+    .column-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .column-title strong {
+      font-size: 14px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .mini {
+      min-height: 28px;
+      padding: 0 8px;
+      font-size: 12px;
+    }
+
+    .table-controls {
+      display: grid;
+      grid-template-columns: 1fr 72px;
+      gap: 7px;
+    }
+
+    .table-controls select,
+    .table-controls input {
+      min-height: 30px;
+      border-radius: 6px;
+      border: 1px solid #cbd9d2;
+      padding: 0 7px;
+      min-width: 0;
+      background: #fff;
+    }
+
+    .table-name-input {
+      grid-column: 1 / -1;
+    }
+
+    .guest-list {
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+      align-content: start;
+      min-height: 280px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    .guest-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--accent);
+      border-radius: 7px;
+      padding: 9px 10px;
+      min-height: 46px;
+      display: grid;
+      gap: 4px;
+      cursor: grab;
+      box-shadow: 0 4px 12px rgba(37, 48, 44, .06);
+    }
+
+    .guest-card:active {
+      cursor: grabbing;
+    }
+
+    .guest-card.has-allergy {
+      border-left-color: var(--danger);
+      background: var(--warn-bg);
+    }
+
+    .guest-name {
+      font-size: 13px;
+      font-weight: 700;
+      overflow-wrap: break-word;
+      word-break: normal;
+      hyphens: auto;
+      line-height: 1.25;
+    }
+
+    .guest-meta {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+      overflow-wrap: break-word;
+      word-break: normal;
+      hyphens: auto;
+    }
+
+    .seat-row {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 7px;
+      align-items: stretch;
+      min-height: 48px;
+    }
+
+    .seat-num {
+      border-radius: 6px;
+      background: #dce9e2;
+      color: #52625d;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      font-size: 12px;
+    }
+
+    .seat-slot {
+      min-height: 48px;
+      border: 1px dashed #b8c8c0;
+      background: rgba(255, 255, 255, .55);
+      border-radius: 7px;
+      display: grid;
+      align-items: center;
+    }
+
+    .seat-slot .guest-card {
+      min-height: 48px;
+      box-shadow: none;
+      border-radius: 6px;
+    }
+
+    .empty-seat {
+      color: #81908a;
+      font-size: 12px;
+      padding: 0 9px;
+    }
+
+    .canvas-shell {
+      min-height: calc(100vh - 110px);
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfcfb;
+    }
+
+    .range-value,
+    output.range-value {
+      min-height: 18px;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .map-wrap {
+      padding: 16px;
+      min-height: 560px;
+      overflow: auto;
+    }
+
+    .room-stage {
+      width: max-content;
+      min-width: 100%;
+      margin: 0 auto;
+      display: grid;
+      place-items: center;
+      padding: 12px;
+    }
+
+    .room {
+      width: var(--room-w);
+      height: var(--room-h);
+      aspect-ratio: var(--room-ratio);
+      background:
+        linear-gradient(90deg, rgba(37, 48, 44, .04) 1px, transparent 1px),
+        linear-gradient(rgba(37, 48, 44, .04) 1px, transparent 1px),
+        #fffdf9;
+      background-size: var(--grid-size) var(--grid-size);
+      border: 3px solid #8fa19a;
+      border-radius: var(--room-radius);
+      position: relative;
+      overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .8), 0 18px 44px rgba(41, 54, 48, .15);
+      clip-path: var(--room-clip);
+      touch-action: none;
+    }
+
+    .room::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(circle at 68% 22%, rgba(47, 125, 104, .08), transparent 26%);
+    }
+
+    .door {
+      position: absolute;
+      background: #fffdf9;
+      border: 3px solid var(--accent-2);
+      z-index: 4;
+    }
+
+    .door.bottom,
+    .door.top {
+      width: var(--door-w);
+      height: var(--door-t);
+      left: calc(var(--door-pos) * 100% - (var(--door-w) / 2));
+    }
+
+    .door.bottom {
+      bottom: -4px;
+      border-top: 0;
+    }
+
+    .door.top {
+      top: -4px;
+      border-bottom: 0;
+    }
+
+    .door.left,
+    .door.right {
+      width: var(--door-t);
+      height: var(--door-w);
+      top: calc(var(--door-pos) * 100% - (var(--door-w) / 2));
+    }
+
+    .door.left {
+      left: -4px;
+      border-right: 0;
+    }
+
+    .door.right {
+      right: -4px;
+      border-left: 0;
+    }
+
+    .map-element {
+      position: absolute;
+      border: 1px solid #c9b8a7;
+      background: rgba(255, 241, 226, .9);
+      color: #72513b;
+      border-radius: 7px;
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      font-weight: 800;
+      text-align: center;
+      padding: 6px;
+      cursor: move;
+      z-index: 3;
+      user-select: none;
+      transform: translate(-50%, -50%) rotate(var(--rotation, 0deg));
+      transform-origin: center;
+      touch-action: none;
+    }
+
+    .map-element.selected {
+      outline: 3px solid rgba(47, 125, 104, .34);
+      outline-offset: 4px;
+    }
+
+    .map-element.map-door {
+      background: rgba(255, 255, 255, .96);
+      border: 3px solid var(--accent-2);
+      color: var(--accent-2);
+      border-radius: 3px;
+      box-shadow: 0 4px 12px rgba(184, 92, 56, .18);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: .48;
+      background: #f3f5f3;
+    }
+
+    .map-table {
+      position: absolute;
+      width: var(--table-w);
+      height: var(--table-h);
+      transform: translate(-50%, -50%) rotate(var(--rotation, 0deg));
+      transform-origin: center;
+      z-index: 5;
+      touch-action: none;
+    }
+
+    .map-table.selected .table-surface {
+      outline: 3px solid rgba(47, 125, 104, .32);
+      outline-offset: 5px;
+    }
+
+    .table-surface {
+      position: absolute;
+      inset: 50%;
+      width: var(--surface-w);
+      height: var(--surface-h);
+      transform: translate(-50%, -50%);
+      background: #f1eee4;
+      border: 2px solid #8e8773;
+      box-shadow: 0 8px 18px rgba(41, 54, 48, .18);
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 8px;
+      cursor: move;
+      user-select: none;
+    }
+
+    .shape-round .table-surface,
+    .shape-oval .table-surface {
+      border-radius: 999px;
+    }
+
+    .shape-square .table-surface {
+      border-radius: 5px;
+    }
+
+    .shape-rect .table-surface {
+      border-radius: 5px;
+    }
+
+    .shape-oval .table-surface {
+      border-radius: 999px;
+    }
+
+    .map-table-name {
+      font-size: 12px;
+      font-weight: 900;
+      line-height: 1.1;
+      color: #4a4d43;
+      overflow-wrap: anywhere;
+    }
+
+    .map-seat {
+      position: absolute;
+      width: var(--seat-size);
+      height: var(--seat-size);
+      border-radius: 999px;
+      transform: translate(-50%, -50%);
+      background: var(--seat);
+      border: 2px solid #bcc8c1;
+      box-shadow: 0 3px 10px rgba(41, 54, 48, .12);
+      display: grid;
+      place-items: center;
+      padding: calc(var(--seat-size) * .08);
+      cursor: grab;
+      z-index: 2;
+    }
+
+    .map-seat.drag-over,
+    .seat-slot.drag-over,
+    .guest-list.drag-over {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .map-seat.occupied {
+      border-color: var(--accent);
+      background: #fbfffd;
+    }
+
+    .map-seat.has-allergy {
+      border-color: var(--danger);
+      background: var(--warn-bg);
+    }
+
+    .seat-label {
+      position: absolute;
+      top: -8px;
+      right: -4px;
+      min-width: max(14px, calc(var(--seat-size) * .38));
+      height: max(14px, calc(var(--seat-size) * .38));
+      border-radius: 999px;
+      background: #54625d;
+      color: #fff;
+      font-size: max(8px, calc(var(--seat-size) * .2));
+      font-weight: 900;
+      display: grid;
+      place-items: center;
+    }
+
+    .seat-person {
+      font-size: max(7px, calc(var(--seat-size) * .19));
+      line-height: 1.05;
+      font-weight: 800;
+      text-align: center;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow-wrap: anywhere;
+    }
+
+    .allergy-mark {
+      position: absolute;
+      bottom: -5px;
+      left: 50%;
+      transform: translateX(-50%);
+      min-width: 20px;
+      height: 18px;
+      border-radius: 999px;
+      background: var(--danger);
+      color: white;
+      font-size: 11px;
+      font-weight: 900;
+      display: grid;
+      place-items: center;
+      padding: 0 5px;
+    }
+
+    .summary {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      background: #f4f8f6;
+    }
+
+    .chip {
+      border: 1px solid #cddbd4;
+      border-radius: 999px;
+      padding: 5px 9px;
+      font-size: 12px;
+      color: #52625d;
+      background: #fff;
+      white-space: nowrap;
+    }
+
+    .save-status {
+      color: var(--muted);
+      font-size: 12px;
+      min-width: 138px;
+      text-align: right;
+    }
+
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      background: #25302c;
+      color: #fff;
+      border-radius: 8px;
+      padding: 10px 13px;
+      box-shadow: var(--shadow);
+      font-size: 13px;
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: opacity .2s ease, transform .2s ease;
+      z-index: 40;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @media (max-width: 1080px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .organizer,
+      .canvas-shell {
+        min-height: auto;
+      }
+
+      .controls {
+        grid-template-columns: repeat(3, minmax(120px, 1fr));
+      }
+
+      .columns {
+        height: min(740px, calc(100vh - 172px));
+      }
+    }
+
+    @media (max-width: 680px) {
+      .topbar {
+        grid-template-columns: 1fr;
+      }
+
+      .toolbar {
+        justify-content: stretch;
+      }
+
+      .toolbar button {
+        flex: 1 1 136px;
+      }
+
+      .layout {
+        padding: 10px;
+      }
+
+      .controls,
+      .search-row {
+        grid-template-columns: 1fr;
+      }
+
+      .columns {
+        grid-auto-columns: minmax(280px, 88vw);
+        height: min(680px, calc(100vh - 162px));
+      }
+
+      .room-stage {
+        min-width: 420px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <h1>Planificador de mesas</h1>
+        <p>Carga invitados, reparte sillas y ajusta el comedor en un plano 2D.</p>
+      </div>
+      <div class="toolbar">
+        <button class="file-input" title="Cargar Excel o CSV">
+          <span>Subir listado</span>
+          <input id="fileInput" type="file" accept=".xlsx,.xls,.csv">
+        </button>
+        <button id="addGuestBtn" type="button" title="Añadir invitado">+ Invitado</button>
+        <button id="addTableBtn" type="button" title="Añadir mesa">+ Mesa</button>
+        <button id="exportBtn" type="button" title="Descargar organización">Exportar</button>
+      </div>
+    </header>
+
+    <section id="layout" class="layout">
+      <section class="panel organizer" aria-label="Organización por columnas">
+        <div class="search-row">
+          <div class="field">
+            <label for="searchInput">Buscar</label>
+            <input id="searchInput" placeholder="Nombre o alergia">
+          </div>
+          <button id="clearAssignmentsBtn" type="button" title="Vaciar mesas">Vaciar</button>
+        </div>
+
+        <div id="columns" class="columns"></div>
+      </section>
+
+      <section class="panel canvas-shell" aria-label="Plano 2D del comedor">
+        <div class="panel-header">
+          <div>
+            <h2>Plano 2D</h2>
+            <small>Mueve mesas, sillas ocupadas y elementos directamente en la sala.</small>
+          </div>
+          <div class="toolbar">
+            <button id="toggleMapBtn" class="mini" type="button" title="Expandir o contraer plano">Contraer</button>
+            <button id="fullscreenMapBtn" class="mini" type="button" title="Ver solo plano 2D">Pantalla completa</button>
+          </div>
+        </div>
+
+        <div class="controls">
+          <div class="field">
+            <label for="roomShape">Sala</label>
+            <select id="roomShape">
+              <option value="rect">Rectangular</option>
+              <option value="square">Cuadrada</option>
+              <option value="oval">Ovalada</option>
+              <option value="l">Forma L</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="roomWidth">Ancho (m)</label>
+            <input id="roomWidth" type="number" min="4" max="60" step="0.5">
+          </div>
+          <div class="field">
+            <label for="roomHeight">Alto (m)</label>
+            <input id="roomHeight" type="number" min="4" max="60" step="0.5">
+          </div>
+          <div class="field">
+            <label for="doorSide">Puerta</label>
+            <select id="doorSide">
+              <option value="bottom">Abajo</option>
+              <option value="top">Arriba</option>
+              <option value="left">Izquierda</option>
+              <option value="right">Derecha</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="doorPos">Posición</label>
+            <input id="doorPos" type="range" min="8" max="92" value="50">
+          </div>
+          <div class="field">
+            <label for="elementType">Elemento</label>
+            <select id="elementType">
+              <option value="Barra">Barra</option>
+              <option value="Baile">Baile</option>
+              <option value="Escenario">Escenario</option>
+              <option value="Buffet">Buffet</option>
+              <option value="Guardarropa">Guardarropa</option>
+              <option value="Puerta">Puerta</option>
+            </select>
+          </div>
+        <button id="addElementBtn" type="button" title="Añadir elemento">+ Elemento</button>
+        <button id="deleteElementBtn" type="button" title="Borrar elemento seleccionado">Borrar elemento</button>
+          <div class="field">
+            <label>Guardado</label>
+            <output id="saveStatus" class="range-value">Sin conectar</output>
+          </div>
+          <div class="field">
+            <label for="zoomLevel">Zoom</label>
+            <input id="zoomLevel" type="range" min="35" max="180" step="5" value="100">
+            <output id="zoomValue" class="range-value">100%</output>
+          </div>
+          <div class="field">
+            <label for="rotationInput">Rotación</label>
+            <input id="rotationInput" type="range" min="0" max="359" step="1" value="0">
+            <output id="rotationValue" class="range-value">0°</output>
+          </div>
+          <div class="field">
+            <label>Seleccionado</label>
+            <output id="selectedLabel" class="range-value">Plano</output>
+          </div>
+          <div class="field">
+            <label for="mapWidth">Ancho visor</label>
+            <input id="mapWidth" type="range" min="420" max="1100" step="20" value="640">
+            <output id="mapWidthValue" class="range-value">640 px</output>
+          </div>
+        </div>
+
+        <div id="summary" class="summary"></div>
+
+        <div class="map-wrap">
+          <div class="room-stage">
+            <div id="room" class="room" aria-label="Sala editable"></div>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const BASE_PIXELS_PER_METER = 48;
+    const CHAIR_SIZE_M = .48;
+    const CHAIR_GAP_M = .34;
+
+    const state = {
+      guests: [
+        { id: uid("g"), name: "Ana García", allergy: "Frutos secos" },
+        { id: uid("g"), name: "Carlos Ruiz", allergy: "" },
+        { id: uid("g"), name: "Lucía Martín", allergy: "Sin gluten" },
+        { id: uid("g"), name: "Marta López", allergy: "" },
+        { id: uid("g"), name: "Diego Sánchez", allergy: "Marisco" },
+        { id: uid("g"), name: "Elena Vidal", allergy: "" }
+      ],
+      tables: [
+        makeTable("Mesa 1", 8, "round", 30, 34),
+        makeTable("Mesa 2", 8, "rect", 66, 36),
+        makeTable("Mesa 3", 6, "oval", 48, 68)
+      ],
+      room: {
+        shape: "rect",
+        width: 18,
+        height: 12,
+        zoom: 1,
+        door: { side: "bottom", pos: .5 },
+        elements: [
+          { id: uid("e"), label: "Baile", x: 18, y: 72, w: 3.8, h: 2.4, rotation: 0 },
+          { id: uid("e"), label: "Barra", x: 76, y: 76, w: 2.4, h: 1.1, rotation: 0 }
+        ]
+      },
+      draggedGuestId: null,
+      selectedTableId: null,
+      selectedElementId: null,
+      mapCollapsed: false,
+      mapFullscreen: false,
+      mapPanelWidth: 640,
+      filter: ""
+    };
+
+    const els = {
+      fileInput: document.getElementById("fileInput"),
+      addGuestBtn: document.getElementById("addGuestBtn"),
+      addTableBtn: document.getElementById("addTableBtn"),
+      exportBtn: document.getElementById("exportBtn"),
+      clearAssignmentsBtn: document.getElementById("clearAssignmentsBtn"),
+      searchInput: document.getElementById("searchInput"),
+      layout: document.getElementById("layout"),
+      columns: document.getElementById("columns"),
+      toggleMapBtn: document.getElementById("toggleMapBtn"),
+      fullscreenMapBtn: document.getElementById("fullscreenMapBtn"),
+      room: document.getElementById("room"),
+      roomShape: document.getElementById("roomShape"),
+      roomWidth: document.getElementById("roomWidth"),
+      roomHeight: document.getElementById("roomHeight"),
+      doorSide: document.getElementById("doorSide"),
+      doorPos: document.getElementById("doorPos"),
+      zoomLevel: document.getElementById("zoomLevel"),
+      zoomValue: document.getElementById("zoomValue"),
+      rotationInput: document.getElementById("rotationInput"),
+      rotationValue: document.getElementById("rotationValue"),
+      selectedLabel: document.getElementById("selectedLabel"),
+      mapWidth: document.getElementById("mapWidth"),
+      mapWidthValue: document.getElementById("mapWidthValue"),
+      saveStatus: document.getElementById("saveStatus"),
+      elementType: document.getElementById("elementType"),
+      addElementBtn: document.getElementById("addElementBtn"),
+      deleteElementBtn: document.getElementById("deleteElementBtn"),
+      summary: document.getElementById("summary"),
+      toast: document.getElementById("toast")
+    };
+
+    function uid(prefix) {
+      return `${prefix}-${Math.random().toString(36).slice(2, 9)}-${Date.now().toString(36)}`;
+    }
+
+    function makeTable(name, capacity, shape, x, y) {
+      return {
+        id: uid("t"),
+        name,
+        shape,
+        capacity,
+        x,
+        y,
+        rotation: 0,
+        seats: Array.from({ length: capacity }, () => null)
+      };
+    }
+
+    function guestById(id) {
+      return state.guests.find(guest => guest.id === id);
+    }
+
+    function tableById(id) {
+      return state.tables.find(table => table.id === id);
+    }
+
+    function elementById(id) {
+      return state.room.elements.find(element => element.id === id);
+    }
+
+    function selectedItem() {
+      if (state.selectedTableId) {
+        const table = tableById(state.selectedTableId);
+        return table ? { type: "table", item: table, label: table.name } : null;
+      }
+      if (state.selectedElementId) {
+        const element = elementById(state.selectedElementId);
+        return element ? { type: "element", item: element, label: element.label } : null;
+      }
+      return null;
+    }
+
+    function assignedGuestIds() {
+      return new Set(state.tables.flatMap(table => table.seats.filter(Boolean)));
+    }
+
+    function unassignedGuests() {
+      const assigned = assignedGuestIds();
+      return state.guests.filter(guest => !assigned.has(guest.id));
+    }
+
+    function cleanCell(value) {
+      if (value == null) return "";
+      return String(value).replace(/\s+/g, " ").trim();
+    }
+
+    function cleanAllergy(value) {
+      const text = cleanCell(value);
+      if (!text || text === "-" || /^no$/i.test(text) || /^ninguna$/i.test(text)) return "";
+      return text;
+    }
+
+    function normalizedKey(value) {
+      return cleanCell(value)
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    }
+
+    function pickValue(row, patterns) {
+      const keys = Object.keys(row);
+      const key = keys.find(candidate => patterns.some(pattern => pattern.test(candidate)));
+      return key ? row[key] : "";
+    }
+
+    function guestFromValues(nameValue, allergyValue) {
+      const name = cleanCell(nameValue);
+      if (!name || name === "-") return null;
+      return { id: uid("g"), name, allergy: cleanAllergy(allergyValue) };
+    }
+
+    function normalizeGuest(row) {
+      const keys = Object.keys(row);
+      const nameKey = keys.find(key => /nombre|name|invitad/i.test(key)) || keys[0];
+      const allergyKey = keys.find(key => /alerg|allerg|intoler|menu|dieta/i.test(key));
+      const name = cleanCell(row[nameKey]);
+      if (!name) return null;
+      const allergy = allergyKey ? cleanAllergy(row[allergyKey]) : "";
+      return { id: uid("g"), name, allergy };
+    }
+
+    function parseImportedGuests(rows) {
+      const hasWeddingColumns = rows.some(row => {
+        const keys = Object.keys(row).join(" ");
+        return /Nombre Acompa/i.test(keys) || /Alergias Acompa/i.test(keys);
+      });
+
+      const guests = [];
+      rows.forEach(row => {
+        if (hasWeddingColumns) {
+          const mainGuest = guestFromValues(
+            pickValue(row, [/^Nombre$/i, /Nombre invitado/i]),
+            pickValue(row, [/Alergias Propias/i, /Alergia Propia/i, /^Alergias?$/i])
+          );
+          const companion = guestFromValues(
+            pickValue(row, [/Nombre Acompa/i, /Acompa/i]),
+            pickValue(row, [/Alergias Acompa/i, /Alergia Acompa/i])
+          );
+          if (mainGuest) guests.push(mainGuest);
+          if (companion) guests.push(companion);
+        } else {
+          const guest = normalizeGuest(row);
+          if (guest) guests.push(guest);
+        }
+      });
+
+      return dedupeGuests(guests);
+    }
+
+    function dedupeGuests(guests) {
+      const byName = new Map();
+      guests.forEach(guest => {
+        const key = normalizedKey(guest.name);
+        if (!key) return;
+        if (!byName.has(key)) {
+          byName.set(key, guest);
+          return;
+        }
+        const existing = byName.get(key);
+        if (!existing.allergy && guest.allergy) existing.allergy = guest.allergy;
+        if (existing.allergy && guest.allergy && existing.allergy !== guest.allergy) {
+          existing.allergy = `${existing.allergy}; ${guest.allergy}`;
+        }
+      });
+      return Array.from(byName.values());
+    }
+
+    function readCsv(text) {
+      const rows = text.split(/\r?\n/).filter(Boolean).map(line => {
+        const parts = line.split(/;|,/).map(part => part.trim());
+        return parts;
+      });
+      if (!rows.length) return [];
+      const headers = rows[0].map(header => header || "Nombre");
+      const objects = rows.slice(1).map(parts => {
+        const row = {};
+        headers.forEach((header, index) => row[header] = parts[index] || "");
+        return row;
+      });
+      return parseImportedGuests(objects);
+    }
+
+    async function handleFile(file) {
+      const ext = file.name.split(".").pop().toLowerCase();
+      let guests = [];
+
+      if (ext === "csv") {
+        guests = readCsv(await file.text());
+      } else {
+        if (!window.XLSX) {
+          showToast("No se pudo cargar el lector de Excel. Prueba con CSV.");
+          return;
+        }
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data);
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+        guests = parseImportedGuests(rows);
+      }
+
+      if (!guests.length) {
+        showToast("No he encontrado invitados en el archivo.");
+        return;
+      }
+
+      state.guests = guests;
+      state.tables.forEach(table => table.seats = Array.from({ length: table.capacity }, () => null));
+      showToast(`${guests.length} invitados cargados.`);
+      render();
+      scheduleSave();
+    }
+
+    function render() {
+      const scrollState = captureColumnScrollState();
+      syncControls();
+      renderSummary();
+      renderColumns();
+      renderRoom();
+      restoreColumnScrollState(scrollState);
+    }
+
+    function captureColumnScrollState() {
+      const lists = {};
+      els.columns.querySelectorAll(".column").forEach(column => {
+        const key = column.dataset.tableId || (column.dataset.dropUnassigned ? "unassigned" : "");
+        const list = column.querySelector(".guest-list");
+        if (key && list) lists[key] = list.scrollTop;
+      });
+      return {
+        left: els.columns.scrollLeft,
+        lists
+      };
+    }
+
+    function restoreColumnScrollState(scrollState) {
+      if (!scrollState) return;
+      els.columns.scrollLeft = scrollState.left || 0;
+      els.columns.querySelectorAll(".column").forEach(column => {
+        const key = column.dataset.tableId || (column.dataset.dropUnassigned ? "unassigned" : "");
+        const list = column.querySelector(".guest-list");
+        if (key && list && scrollState.lists[key] != null) {
+          list.scrollTop = scrollState.lists[key];
+        }
+      });
+      updateTopbarCompact();
+    }
+
+    const STORAGE_KEY = "planificador-mesas-boda";
+
+    // Indica si el guardado en la nube (Vercel KV) está activo. Se descubre en
+    // la primera carga: si no lo está, trabajamos solo con localStorage.
+    let cloudEnabled = true;
+
+    function serializableState() {
+      return {
+        guests: state.guests,
+        tables: state.tables,
+        room: state.room,
+        mapCollapsed: state.mapCollapsed,
+        mapFullscreen: state.mapFullscreen,
+        mapPanelWidth: state.mapPanelWidth
+      };
+    }
+
+    function saveToLocalStorage() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(serializableState()));
+      } catch (error) {
+        // El almacenamiento local puede fallar (modo privado, lleno...). No es crítico.
+      }
+    }
+
+    function readFromLocalStorage() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function applyLoadedState(loaded) {
+      if (!loaded || typeof loaded !== "object") return false;
+      state.guests = Array.isArray(loaded.guests) ? loaded.guests : state.guests;
+      state.tables = Array.isArray(loaded.tables) ? loaded.tables : state.tables;
+      state.room = loaded.room && typeof loaded.room === "object" ? loaded.room : state.room;
+      state.draggedGuestId = null;
+      state.selectedTableId = null;
+      state.selectedElementId = null;
+      state.mapCollapsed = !!loaded.mapCollapsed;
+      state.mapFullscreen = !!loaded.mapFullscreen;
+      state.mapPanelWidth = Number(loaded.mapPanelWidth) || state.mapPanelWidth;
+      return true;
+    }
+
+    function scheduleSave() {
+      els.saveStatus.value = "Guardando...";
+      // Respaldo inmediato en el navegador: nunca se pierde el trabajo.
+      saveToLocalStorage();
+      clearTimeout(scheduleSave.timer);
+      scheduleSave.timer = setTimeout(persistState, 450);
+    }
+
+    async function persistState() {
+      saveToLocalStorage();
+
+      if (!cloudEnabled) {
+        els.saveStatus.value = "Guardado en este equipo";
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(serializableState())
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || "No se pudo guardar");
+
+        if (result.configured === false) {
+          cloudEnabled = false;
+          els.saveStatus.value = "Guardado en este equipo";
+          return;
+        }
+        els.saveStatus.value = `Guardado ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
+      } catch (error) {
+        // La nube falló pero el respaldo local ya está hecho.
+        els.saveStatus.value = "Guardado en este equipo";
+        showToast("No se pudo sincronizar con la nube. Guardado en este equipo.");
+      }
+    }
+
+    async function loadSavedState() {
+      els.saveStatus.value = "Cargando...";
+      try {
+        const response = await fetch("/api/load");
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || "No se pudo cargar");
+
+        if (result.configured === false) {
+          // Sin nube: usamos lo que haya en este navegador.
+          cloudEnabled = false;
+          if (applyLoadedState(readFromLocalStorage())) {
+            render();
+            els.saveStatus.value = "Datos de este equipo";
+          } else {
+            els.saveStatus.value = "Listo";
+          }
+          return;
+        }
+
+        cloudEnabled = true;
+        if (result.exists && applyLoadedState(result.state)) {
+          render();
+          saveToLocalStorage();
+          els.saveStatus.value = "Datos cargados";
+        } else if (applyLoadedState(readFromLocalStorage())) {
+          // La nube está vacía pero este equipo tenía datos: los subimos.
+          render();
+          els.saveStatus.value = "Listo";
+          scheduleSave();
+        } else {
+          els.saveStatus.value = "Listo";
+        }
+      } catch (error) {
+        // Sin conexión con la API: caemos al respaldo local.
+        if (applyLoadedState(readFromLocalStorage())) {
+          render();
+          els.saveStatus.value = "Datos de este equipo";
+        } else {
+          els.saveStatus.value = "Listo";
+        }
+      }
+    }
+
+    function initializeSaveStatus() {
+      els.saveStatus.value = "Listo";
+    }
+
+    async function initializeApp() {
+      render();
+      initializeSaveStatus();
+      setupColumnNavigation();
+      await loadSavedState();
+    }
+
+    function setupColumnNavigation() {
+      let pan = null;
+      let blockContextMenuUntil = 0;
+
+      const isFormControl = target => !!target.closest("input, select, textarea, button");
+      const isGuestDragTarget = target => !!target.closest(".guest-card");
+      const canPan = event => {
+        if (isFormControl(event.target)) return false;
+        if ((event.buttons & 3) === 3) return true;
+        return event.button === 0 && !isGuestDragTarget(event.target);
+      };
+
+      els.columns.addEventListener("pointerdown", event => {
+        if (!canPan(event)) return;
+        pan = {
+          x: event.clientX,
+          scrollLeft: els.columns.scrollLeft,
+          moved: false,
+          bothButtons: (event.buttons & 3) === 3
+        };
+        els.columns.classList.add("is-panning");
+        els.columns.setPointerCapture(event.pointerId);
+        event.preventDefault();
+      });
+
+      els.columns.addEventListener("pointermove", event => {
+        if (!pan) return;
+        const dx = event.clientX - pan.x;
+        if (Math.abs(dx) > 3) pan.moved = true;
+        els.columns.scrollLeft = pan.scrollLeft - dx;
+        if (pan.bothButtons) blockContextMenuUntil = Date.now() + 450;
+      });
+
+      const endPan = () => {
+        if (!pan) return;
+        if (pan.moved) blockContextMenuUntil = Date.now() + 450;
+        pan = null;
+        els.columns.classList.remove("is-panning");
+      };
+
+      els.columns.addEventListener("pointerup", endPan);
+      els.columns.addEventListener("pointercancel", endPan);
+      els.columns.addEventListener("contextmenu", event => {
+        if (Date.now() < blockContextMenuUntil) event.preventDefault();
+      });
+
+      els.columns.addEventListener("wheel", event => {
+        const absX = Math.abs(event.deltaX);
+        const absY = Math.abs(event.deltaY);
+        const insideGuestList = !!event.target.closest(".guest-list");
+
+        if (absX > absY) {
+          els.columns.scrollLeft += event.deltaX;
+          event.preventDefault();
+          requestAnimationFrame(updateTopbarCompact);
+          return;
+        }
+
+        if (!insideGuestList || event.shiftKey) {
+          els.columns.scrollLeft += event.deltaY;
+          event.preventDefault();
+        }
+        requestAnimationFrame(updateTopbarCompact);
+      }, { passive: false });
+
+      els.columns.addEventListener("scroll", updateTopbarCompact, true);
+      window.addEventListener("scroll", updateTopbarCompact);
+    }
+
+    function updateTopbarCompact() {
+      const lists = Array.from(els.columns.querySelectorAll(".guest-list"));
+      const listScrolled = lists.some(list => list.scrollTop > 12);
+      const columnsMoved = els.columns.scrollLeft > 20;
+      document.body.classList.toggle("topbar-compact", listScrolled || columnsMoved || window.scrollY > 12);
+    }
+
+    function syncControls() {
+      els.roomShape.value = state.room.shape;
+      els.roomWidth.value = state.room.width;
+      els.roomHeight.value = state.room.height;
+      els.doorSide.value = state.room.door.side;
+      els.doorPos.value = Math.round(state.room.door.pos * 100);
+      els.zoomLevel.value = Math.round(state.room.zoom * 100);
+      els.zoomValue.value = `${Math.round(state.room.zoom * 100)}%`;
+      const selected = selectedItem();
+      els.rotationInput.disabled = !selected;
+      els.rotationInput.value = selected ? Math.round(selected.item.rotation || 0) : 0;
+      els.rotationValue.value = selected ? `${Math.round(selected.item.rotation || 0)}°` : "0°";
+      els.selectedLabel.value = selected ? selected.label : "Plano";
+      els.deleteElementBtn.disabled = !state.selectedElementId;
+      els.layout.classList.toggle("map-collapsed", state.mapCollapsed);
+      els.layout.classList.toggle("map-fullscreen", state.mapFullscreen);
+      els.layout.style.setProperty("--map-panel-width", `${state.mapPanelWidth}px`);
+      els.toggleMapBtn.textContent = state.mapCollapsed ? "Expandir" : "Contraer";
+      els.toggleMapBtn.title = state.mapCollapsed ? "Expandir plano 2D" : "Contraer plano 2D";
+      els.fullscreenMapBtn.textContent = state.mapFullscreen ? "Salir pantalla completa" : "Pantalla completa";
+      els.fullscreenMapBtn.title = state.mapFullscreen ? "Volver al editor de columnas" : "Ver solo plano 2D";
+      els.mapWidth.value = state.mapPanelWidth;
+      els.mapWidthValue.value = `${state.mapPanelWidth} px`;
+    }
+
+    function renderSummary() {
+      const assigned = assignedGuestIds().size;
+      const allergyCount = state.guests.filter(guest => guest.allergy).length;
+      const capacity = state.tables.reduce((sum, table) => sum + table.capacity, 0);
+      els.summary.innerHTML = `
+        <span class="chip">${state.guests.length} invitados</span>
+        <span class="chip">${assigned} sentados</span>
+        <span class="chip">${Math.max(capacity - assigned, 0)} sillas libres</span>
+        <span class="chip">${allergyCount} alergias</span>
+        <span class="chip">${state.tables.length} mesas</span>
+        <span class="chip">Sala ${state.room.width} x ${state.room.height} m</span>
+        <span class="chip">Cuadrícula 1 m</span>
+      `;
+    }
+
+    function matchesFilter(guest) {
+      if (!state.filter) return true;
+      const haystack = `${guest.name} ${guest.allergy}`.toLowerCase();
+      return haystack.includes(state.filter);
+    }
+
+    function renderColumns() {
+      els.columns.innerHTML = "";
+      els.columns.appendChild(renderUnassignedColumn());
+      state.tables.forEach(table => els.columns.appendChild(renderTableColumn(table)));
+    }
+
+    function renderUnassignedColumn() {
+      const column = document.createElement("article");
+      column.className = "column unassigned-column";
+      column.dataset.dropUnassigned = "true";
+      column.innerHTML = `
+        <div class="column-head">
+          <div class="column-title">
+            <strong>Sin asignar</strong>
+            <span class="chip">${unassignedGuests().length}</span>
+          </div>
+        </div>
+        <div class="guest-list"></div>
+      `;
+      const list = column.querySelector(".guest-list");
+      const guests = unassignedGuests().filter(matchesFilter);
+      if (!guests.length) {
+        list.innerHTML = `<div class="empty-seat">No hay invitados pendientes.</div>`;
+      } else {
+        guests.forEach(guest => list.appendChild(renderGuestCard(guest)));
+      }
+      attachGuestDrop(list, guestId => unassignGuest(guestId));
+      attachGuestDrop(column, guestId => unassignGuest(guestId));
+      return column;
+    }
+
+    function renderTableColumn(table) {
+      const column = document.createElement("article");
+      column.className = "column";
+      column.dataset.tableId = table.id;
+      column.innerHTML = `
+        <div class="column-head">
+          <div class="column-title">
+            <strong title="${escapeAttr(table.name)}">${escapeHtml(table.name)}</strong>
+            <button class="mini" type="button" data-select-table="${table.id}" title="Seleccionar mesa">Ver</button>
+          </div>
+          <div class="table-controls">
+            <input class="table-name-input" data-table-name="${table.id}" value="${escapeAttr(table.name)}" title="Nombre de la mesa" placeholder="Nombre de la mesa">
+            <select data-shape="${table.id}" title="Forma de mesa">
+              <option value="round">Redonda</option>
+              <option value="rect">Rectangular</option>
+              <option value="square">Cuadrada</option>
+              <option value="oval">Ovalada</option>
+            </select>
+            <input data-capacity="${table.id}" type="number" min="1" max="120" value="${table.capacity}" title="Sillas">
+          </div>
+        </div>
+        <div class="guest-list"></div>
+      `;
+      column.querySelector(`[data-shape="${table.id}"]`).value = table.shape;
+      const list = column.querySelector(".guest-list");
+
+      table.seats.forEach((guestId, index) => {
+        const row = document.createElement("div");
+        row.className = "seat-row";
+        row.innerHTML = `
+          <div class="seat-num">${index + 1}</div>
+          <div class="seat-slot" data-table-id="${table.id}" data-seat-index="${index}"></div>
+        `;
+        const slot = row.querySelector(".seat-slot");
+        const guest = guestId ? guestById(guestId) : null;
+        if (guest && matchesFilter(guest)) {
+          slot.appendChild(renderGuestCard(guest));
+        } else if (!guest) {
+          slot.innerHTML = `<span class="empty-seat">Silla libre</span>`;
+        } else {
+          slot.innerHTML = `<span class="empty-seat">Oculto por filtro</span>`;
+        }
+        attachGuestDrop(slot, draggedGuestId => assignGuestToSeat(draggedGuestId, table.id, index));
+        list.appendChild(row);
+      });
+
+      attachGuestDrop(column, guestId => assignGuestToTable(guestId, table.id));
+      return column;
+    }
+
+    function renderGuestCard(guest) {
+      const card = document.createElement("div");
+      card.className = `guest-card${guest.allergy ? " has-allergy" : ""}`;
+      card.draggable = true;
+      card.dataset.guestId = guest.id;
+      card.innerHTML = `
+        <div class="guest-name">${escapeHtml(guest.name)}</div>
+        ${guest.allergy ? `<div class="guest-meta">Alergia: ${escapeHtml(guest.allergy)}</div>` : `<div class="guest-meta">Sin alergias registradas</div>`}
+      `;
+      card.addEventListener("dragstart", event => {
+        state.draggedGuestId = guest.id;
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", guest.id);
+      });
+      card.addEventListener("dragend", () => {
+        state.draggedGuestId = null;
+      });
+      return card;
+    }
+
+    function renderRoom() {
+      const ppm = pixelsPerMeter();
+      const widthPx = Math.max(220, state.room.width * ppm);
+      const heightPx = Math.max(180, state.room.height * ppm);
+      const radius = state.room.shape === "oval" ? "50%" : "8px";
+      const clip = state.room.shape === "l"
+        ? "polygon(0 0, 100% 0, 100% 64%, 62% 64%, 62% 100%, 0 100%)"
+        : "none";
+
+      els.room.style.setProperty("--room-w", `${widthPx}px`);
+      els.room.style.setProperty("--room-h", `${heightPx}px`);
+      els.room.style.setProperty("--room-ratio", `${state.room.width} / ${state.room.height}`);
+      els.room.style.setProperty("--room-radius", radius);
+      els.room.style.setProperty("--room-clip", clip);
+      els.room.style.setProperty("--door-pos", state.room.door.pos);
+      els.room.style.setProperty("--grid-size", `${ppm}px`);
+      els.room.style.setProperty("--door-w", `${Math.max(18, 1.3 * ppm)}px`);
+      els.room.style.setProperty("--door-t", `${Math.max(7, .18 * ppm)}px`);
+      els.room.innerHTML = `<div class="door ${state.room.door.side}" title="Puerta de entrada"></div>`;
+
+      state.room.elements.forEach(element => els.room.appendChild(renderElement(element)));
+      state.tables.forEach(table => els.room.appendChild(renderMapTable(table)));
+    }
+
+    function renderElement(element) {
+      const ppm = pixelsPerMeter();
+      const node = document.createElement("div");
+      node.className = `map-element${element.label === "Puerta" ? " map-door" : ""}${state.selectedElementId === element.id ? " selected" : ""}`;
+      node.textContent = element.label;
+      node.style.left = `${element.x}%`;
+      node.style.top = `${element.y}%`;
+      node.style.width = `${element.w * ppm}px`;
+      node.style.height = `${element.h * ppm}px`;
+      node.style.setProperty("--rotation", `${element.rotation || 0}deg`);
+      node.dataset.elementId = element.id;
+      node.addEventListener("pointerdown", () => selectElement(element.id));
+      makePositionDraggable(node, (x, y) => {
+        element.x = x;
+        element.y = y;
+        node.style.left = `${x}%`;
+        node.style.top = `${y}%`;
+      });
+      return node;
+    }
+
+    function renderMapTable(table) {
+      const node = document.createElement("div");
+      const occupied = table.seats.filter(Boolean).length;
+      const metrics = tableMetrics(table);
+      const ppm = pixelsPerMeter();
+      node.className = `map-table shape-${table.shape}${state.selectedTableId === table.id ? " selected" : ""}`;
+      node.style.left = `${table.x}%`;
+      node.style.top = `${table.y}%`;
+      node.style.setProperty("--table-w", `${metrics.containerW * ppm}px`);
+      node.style.setProperty("--table-h", `${metrics.containerH * ppm}px`);
+      node.style.setProperty("--surface-w", `${metrics.surfaceW * ppm}px`);
+      node.style.setProperty("--surface-h", `${metrics.surfaceH * ppm}px`);
+      node.style.setProperty("--seat-size", `${CHAIR_SIZE_M * ppm}px`);
+      node.style.setProperty("--rotation", `${table.rotation || 0}deg`);
+      node.dataset.tableId = table.id;
+      node.innerHTML = `
+        <div class="table-surface" data-drag-table="${table.id}">
+          <div class="map-table-name">${escapeHtml(table.name)}<br>${occupied}/${table.capacity}</div>
+        </div>
+      `;
+
+      table.seats.forEach((guestId, index) => {
+        const seat = renderMapSeat(table, guestId, index);
+        node.appendChild(seat);
+      });
+
+      const surface = node.querySelector(".table-surface");
+      surface.addEventListener("pointerdown", () => selectTable(table.id));
+      makePositionDraggable(surface, (x, y) => {
+        table.x = x;
+        table.y = y;
+        node.style.left = `${x}%`;
+        node.style.top = `${y}%`;
+      }, node);
+      return node;
+    }
+
+    function renderMapSeat(table, guestId, index) {
+      const seat = document.createElement("div");
+      const guest = guestId ? guestById(guestId) : null;
+      const pos = seatPosition(index, table);
+      seat.className = `map-seat${guest ? " occupied" : ""}${guest && guest.allergy ? " has-allergy" : ""}`;
+      seat.style.left = `${pos.x}%`;
+      seat.style.top = `${pos.y}%`;
+      seat.dataset.tableId = table.id;
+      seat.dataset.seatIndex = index;
+      seat.title = guest ? `${guest.name}${guest.allergy ? ` | Alergia: ${guest.allergy}` : ""}` : `Silla ${index + 1}`;
+      seat.draggable = !!guest;
+      seat.innerHTML = `
+        <span class="seat-label">${index + 1}</span>
+        <span class="seat-person">${guest ? escapeHtml(guest.name) : ""}</span>
+        ${guest && guest.allergy ? `<span class="allergy-mark" title="${escapeAttr(guest.allergy)}">!</span>` : ""}
+      `;
+      if (guest) {
+        seat.addEventListener("dragstart", event => {
+          state.draggedGuestId = guest.id;
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", guest.id);
+        });
+      }
+      attachGuestDrop(seat, draggedGuestId => assignGuestToSeat(draggedGuestId, table.id, index));
+      return seat;
+    }
+
+    function pixelsPerMeter() {
+      return BASE_PIXELS_PER_METER * state.room.zoom;
+    }
+
+    function tableMetrics(table) {
+      if (table.shape === "rect") {
+        const sideSeats = Math.ceil(table.capacity / 2);
+        const surfaceW = Math.max(1.8, sideSeats * .62 + .35);
+        const surfaceH = 1.05;
+        return {
+          surfaceW,
+          surfaceH,
+          containerW: surfaceW + (CHAIR_SIZE_M + CHAIR_GAP_M) * 2,
+          containerH: surfaceH + (CHAIR_SIZE_M + CHAIR_GAP_M) * 2
+        };
+      }
+
+      if (table.shape === "oval") {
+        const surfaceW = Math.max(2.1, Math.ceil(table.capacity / 2) * .62 + .55);
+        const surfaceH = Math.max(1.35, Math.min(2.2, table.capacity * .035 + 1.05));
+        return {
+          surfaceW,
+          surfaceH,
+          containerW: surfaceW + (CHAIR_SIZE_M + CHAIR_GAP_M) * 2,
+          containerH: surfaceH + (CHAIR_SIZE_M + CHAIR_GAP_M) * 2
+        };
+      }
+
+      if (table.shape === "square") {
+        const side = Math.max(1.1, Math.ceil(table.capacity / 4) * .62 + .35);
+        return {
+          surfaceW: side,
+          surfaceH: side,
+          containerW: side + (CHAIR_SIZE_M + CHAIR_GAP_M) * 2,
+          containerH: side + (CHAIR_SIZE_M + CHAIR_GAP_M) * 2
+        };
+      }
+
+      const diameter = Math.max(1.5, (table.capacity * .62) / Math.PI);
+      return {
+        surfaceW: diameter,
+        surfaceH: diameter,
+        containerW: diameter + (CHAIR_SIZE_M + CHAIR_GAP_M) * 2,
+        containerH: diameter + (CHAIR_SIZE_M + CHAIR_GAP_M) * 2
+      };
+    }
+
+    function selectTable(tableId) {
+      state.selectedTableId = tableId;
+      state.selectedElementId = null;
+      updateSelectedClasses();
+      syncControls();
+    }
+
+    function selectElement(elementId) {
+      state.selectedElementId = elementId;
+      state.selectedTableId = null;
+      updateSelectedClasses();
+      syncControls();
+    }
+
+    function updateSelectedClasses() {
+      document.querySelectorAll(".map-table").forEach(node => {
+        node.classList.toggle("selected", node.dataset.tableId === state.selectedTableId);
+      });
+      document.querySelectorAll(".map-element").forEach(node => {
+        node.classList.toggle("selected", node.dataset.elementId === state.selectedElementId);
+      });
+    }
+
+    function seatPosition(index, table) {
+      const count = table.capacity;
+      const metrics = tableMetrics(table);
+      const centerX = metrics.containerW / 2;
+      const centerY = metrics.containerH / 2;
+      if (table.shape === "rect") {
+        const perSide = Math.ceil(count / 2);
+        const stepTop = metrics.surfaceW / Math.max(perSide - 1, 1);
+        const yTop = centerY - metrics.surfaceH / 2 - CHAIR_GAP_M - CHAIR_SIZE_M / 2;
+        const yBottom = centerY + metrics.surfaceH / 2 + CHAIR_GAP_M + CHAIR_SIZE_M / 2;
+        if (index < perSide) {
+          const x = centerX - metrics.surfaceW / 2 + stepTop * index;
+          return { x: (x / metrics.containerW) * 100, y: (yTop / metrics.containerH) * 100 };
+        }
+        const bottomIndex = index - perSide;
+        const bottomCount = count - perSide;
+        const stepBottom = metrics.surfaceW / Math.max(bottomCount - 1, 1);
+        const x = centerX + metrics.surfaceW / 2 - stepBottom * bottomIndex;
+        return { x: (x / metrics.containerW) * 100, y: (yBottom / metrics.containerH) * 100 };
+      }
+      const radiusX = metrics.surfaceW / 2 + CHAIR_GAP_M + CHAIR_SIZE_M / 2;
+      const radiusY = metrics.surfaceH / 2 + CHAIR_GAP_M + CHAIR_SIZE_M / 2;
+      const angle = (-90 + (360 / count) * index) * Math.PI / 180;
+      const x = centerX + Math.cos(angle) * radiusX;
+      const y = centerY + Math.sin(angle) * radiusY;
+      return {
+        x: (x / metrics.containerW) * 100,
+        y: (y / metrics.containerH) * 100
+      };
+    }
+
+    function attachGuestDrop(node, callback) {
+      node.addEventListener("dragover", event => {
+        if (!state.draggedGuestId && !event.dataTransfer.getData("text/plain")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        node.classList.add("drag-over", "is-drop");
+      });
+      node.addEventListener("dragleave", () => {
+        node.classList.remove("drag-over", "is-drop");
+      });
+      node.addEventListener("drop", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        node.classList.remove("drag-over", "is-drop");
+        const guestId = state.draggedGuestId || event.dataTransfer.getData("text/plain");
+        if (guestId) callback(guestId);
+      });
+    }
+
+    function removeGuestFromSeats(guestId) {
+      state.tables.forEach(table => {
+        table.seats = table.seats.map(existing => existing === guestId ? null : existing);
+      });
+    }
+
+    function assignGuestToTable(guestId, tableId) {
+      const table = tableById(tableId);
+      if (!table) return;
+      const emptyIndex = table.seats.findIndex(seat => !seat);
+      if (emptyIndex === -1) {
+        showToast(`${table.name} no tiene sillas libres.`);
+        return;
+      }
+      assignGuestToSeat(guestId, tableId, emptyIndex);
+    }
+
+    function assignGuestToSeat(guestId, tableId, seatIndex) {
+      const table = tableById(tableId);
+      if (!table || !guestById(guestId)) return;
+      const currentGuestInSeat = table.seats[seatIndex];
+      let previousSeat = null;
+
+      state.tables.forEach(otherTable => {
+        otherTable.seats.forEach((existing, index) => {
+          if (existing === guestId) previousSeat = { table: otherTable, index };
+        });
+      });
+
+      if (currentGuestInSeat && previousSeat) {
+        previousSeat.table.seats[previousSeat.index] = currentGuestInSeat;
+      } else {
+        removeGuestFromSeats(guestId);
+      }
+
+      table.seats[seatIndex] = guestId;
+      state.selectedTableId = tableId;
+      state.selectedElementId = null;
+      render();
+      scheduleSave();
+    }
+
+    function unassignGuest(guestId) {
+      removeGuestFromSeats(guestId);
+      render();
+      scheduleSave();
+    }
+
+    function setCapacity(table, nextCapacity) {
+      const capacity = Math.max(1, Math.min(120, Number(nextCapacity) || table.capacity));
+      const current = table.seats.slice(0, capacity);
+      while (current.length < capacity) current.push(null);
+      const removed = table.seats.slice(capacity).filter(Boolean);
+      table.capacity = capacity;
+      table.seats = current;
+      if (removed.length) showToast(`${removed.length} invitado(s) quedaron sin asignar.`);
+      render();
+      scheduleSave();
+    }
+
+    function makePositionDraggable(handle, onMove, containerNode = handle) {
+      let active = null;
+      handle.addEventListener("pointerdown", event => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        const roomRect = els.room.getBoundingClientRect();
+        const containerRect = containerNode.getBoundingClientRect();
+        active = {
+          dx: event.clientX - containerRect.left - containerRect.width / 2,
+          dy: event.clientY - containerRect.top - containerRect.height / 2,
+          roomRect
+        };
+        handle.setPointerCapture(event.pointerId);
+      });
+      handle.addEventListener("pointermove", event => {
+        if (!active) return;
+        const x = ((event.clientX - active.roomRect.left - active.dx) / active.roomRect.width) * 100;
+        const y = ((event.clientY - active.roomRect.top - active.dy) / active.roomRect.height) * 100;
+        onMove(clamp(x, 5, 95), clamp(y, 5, 95));
+      });
+      handle.addEventListener("pointerup", () => {
+        if (active) scheduleSave();
+        active = null;
+      });
+      handle.addEventListener("pointercancel", () => active = null);
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function addGuest() {
+      const name = prompt("Nombre del invitado");
+      if (!name || !name.trim()) return;
+      const allergy = prompt("Alergia o intolerancia, si la hay") || "";
+      state.guests.push({ id: uid("g"), name: name.trim(), allergy: allergy.trim() });
+      render();
+      scheduleSave();
+    }
+
+    function addTable() {
+      const table = makeTable(`Mesa ${state.tables.length + 1}`, 8, "round", 50, 50);
+      state.tables.push(table);
+      state.selectedTableId = table.id;
+      render();
+      scheduleSave();
+    }
+
+    function renameTable(tableId, value) {
+      const table = tableById(tableId);
+      if (!table) return;
+      const nextName = cleanCell(value) || table.name;
+      if (nextName === table.name) {
+        renderColumns();
+        return;
+      }
+      table.name = nextName;
+      render();
+      scheduleSave();
+    }
+
+    function addElement() {
+      const label = els.elementType.value;
+      const dimensions = elementDimensions(label);
+      state.room.elements.push({
+        id: uid("e"),
+        label,
+        x: 50,
+        y: 50,
+        w: dimensions.w,
+        h: dimensions.h,
+        rotation: 0
+      });
+      state.selectedElementId = state.room.elements.at(-1).id;
+      state.selectedTableId = null;
+      render();
+      scheduleSave();
+    }
+
+    function elementDimensions(label) {
+      const sizes = {
+        Baile: { w: 3.8, h: 2.4 },
+        Escenario: { w: 3, h: 1.8 },
+        Puerta: { w: 1.3, h: .25 },
+        Buffet: { w: 2.4, h: 1.1 },
+        Barra: { w: 2.4, h: 1.1 },
+        Guardarropa: { w: 2.2, h: 1.1 }
+      };
+      return sizes[label] || { w: 2.4, h: 1.1 };
+    }
+
+    function deleteSelectedElement() {
+      if (!state.selectedElementId) {
+        showToast("Selecciona un elemento del plano para borrarlo.");
+        return;
+      }
+      const element = elementById(state.selectedElementId);
+      state.room.elements = state.room.elements.filter(item => item.id !== state.selectedElementId);
+      state.selectedElementId = null;
+      showToast(element ? `${element.label} borrado.` : "Elemento borrado.");
+      render();
+      scheduleSave();
+    }
+
+    function clearAssignments() {
+      state.tables.forEach(table => table.seats = Array.from({ length: table.capacity }, () => null));
+      render();
+      scheduleSave();
+    }
+
+    function exportPlan() {
+      const seatedIds = new Set();
+      const asignaciones = [];
+      state.tables.forEach(table => {
+        table.seats.forEach((guestId, index) => {
+          const guest = guestId ? guestById(guestId) : null;
+          if (guest) seatedIds.add(guest.id);
+          asignaciones.push({
+            Mesa: table.name,
+            Silla: index + 1,
+            Invitado: guest ? guest.name : "",
+            Alergia: guest ? guest.allergy : "",
+            Forma: table.shape,
+            Capacidad: table.capacity
+          });
+        });
+      });
+      unassignedGuests().forEach(guest => asignaciones.push({
+        Mesa: "Sin asignar",
+        Silla: "",
+        Invitado: guest.name,
+        Alergia: guest.allergy,
+        Forma: "",
+        Capacidad: ""
+      }));
+
+      // Si por lo que sea no cargó la librería, caemos a CSV para no quedarnos sin export.
+      if (!window.XLSX) {
+        exportPlanCsv(asignaciones);
+        return;
+      }
+
+      const invitados = state.guests.map(guest => ({
+        Nombre: guest.name,
+        Alergia: guest.allergy || "",
+        Sentado: seatedIds.has(guest.id) ? "Sí" : "No"
+      }));
+
+      const mesas = state.tables.map(table => ({
+        Nombre: table.name,
+        Forma: table.shape,
+        Capacidad: table.capacity,
+        Ocupadas: table.seats.filter(Boolean).length
+      }));
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(asignaciones), "Asignaciones");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(invitados), "Invitados");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(mesas), "Mesas");
+      XLSX.writeFile(wb, "organizacion-mesas-boda.xlsx");
+    }
+
+    function exportPlanCsv(asignaciones) {
+      const csv = [
+        ["Mesa", "Silla", "Invitado", "Alergia", "Forma"],
+        ...asignaciones.map(row => [row.Mesa, row.Silla, row.Invitado, row.Alergia, row.Forma])
+      ].map(row => row.map(csvCell).join(";")).join("\n");
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "organizacion-mesas-boda.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function csvCell(value) {
+      const text = String(value ?? "");
+      return `"${text.replaceAll('"', '""')}"`;
+    }
+
+    function showToast(message) {
+      els.toast.textContent = message;
+      els.toast.classList.add("show");
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => els.toast.classList.remove("show"), 2600);
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      })[char]);
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value).replaceAll("\n", " ");
+    }
+
+    els.fileInput.addEventListener("change", event => {
+      const file = event.target.files[0];
+      if (file) handleFile(file);
+      event.target.value = "";
+    });
+
+    els.addGuestBtn.addEventListener("click", addGuest);
+    els.addTableBtn.addEventListener("click", addTable);
+    els.addElementBtn.addEventListener("click", addElement);
+    els.deleteElementBtn.addEventListener("click", deleteSelectedElement);
+    els.toggleMapBtn.addEventListener("click", () => {
+      state.mapCollapsed = !state.mapCollapsed;
+      if (state.mapCollapsed) state.mapFullscreen = false;
+      syncControls();
+      scheduleSave();
+    });
+    els.fullscreenMapBtn.addEventListener("click", () => {
+      state.mapFullscreen = !state.mapFullscreen;
+      if (state.mapFullscreen) state.mapCollapsed = false;
+      syncControls();
+      scheduleSave();
+    });
+    els.mapWidth.addEventListener("input", event => {
+      state.mapPanelWidth = Number(event.target.value);
+      syncControls();
+      scheduleSave();
+    });
+    els.exportBtn.addEventListener("click", exportPlan);
+    els.clearAssignmentsBtn.addEventListener("click", clearAssignments);
+
+    els.searchInput.addEventListener("input", event => {
+      state.filter = event.target.value.trim().toLowerCase();
+      renderColumns();
+    });
+
+    els.roomShape.addEventListener("change", event => {
+      state.room.shape = event.target.value;
+      if (state.room.shape === "square") state.room.height = state.room.width;
+      render();
+      scheduleSave();
+    });
+
+    els.roomWidth.addEventListener("input", event => {
+      state.room.width = clamp(Number(event.target.value) || 18, 4, 60);
+      if (state.room.shape === "square") state.room.height = state.room.width;
+      render();
+      scheduleSave();
+    });
+
+    els.roomHeight.addEventListener("input", event => {
+      state.room.height = clamp(Number(event.target.value) || 12, 4, 60);
+      if (state.room.shape === "square") state.room.width = state.room.height;
+      render();
+      scheduleSave();
+    });
+
+    els.doorSide.addEventListener("change", event => {
+      state.room.door.side = event.target.value;
+      render();
+      scheduleSave();
+    });
+
+    els.doorPos.addEventListener("input", event => {
+      state.room.door.pos = Number(event.target.value) / 100;
+      renderRoom();
+      scheduleSave();
+    });
+
+    els.zoomLevel.addEventListener("input", event => {
+      state.room.zoom = Number(event.target.value) / 100;
+      els.zoomValue.value = `${event.target.value}%`;
+      renderRoom();
+      scheduleSave();
+    });
+
+    els.rotationInput.addEventListener("input", event => {
+      const selected = selectedItem();
+      if (!selected) return;
+      const rotation = Number(event.target.value);
+      selected.item.rotation = rotation;
+      els.rotationValue.value = `${rotation}°`;
+      const selector = selected.type === "table"
+        ? `.map-table[data-table-id="${selected.item.id}"]`
+        : `.map-element[data-element-id="${selected.item.id}"]`;
+      const node = document.querySelector(selector);
+      if (node) node.style.setProperty("--rotation", `${rotation}deg`);
+      scheduleSave();
+    });
+
+    els.columns.addEventListener("change", event => {
+      const tableNameId = event.target.dataset.tableName;
+      const shapeId = event.target.dataset.shape;
+      const capacityId = event.target.dataset.capacity;
+      if (tableNameId) {
+        renameTable(tableNameId, event.target.value);
+      }
+      if (shapeId) {
+        tableById(shapeId).shape = event.target.value;
+        render();
+        scheduleSave();
+      }
+      if (capacityId) {
+        setCapacity(tableById(capacityId), event.target.value);
+      }
+    });
+
+    els.columns.addEventListener("keydown", event => {
+      if (!event.target.dataset.tableName || event.key !== "Enter") return;
+      event.preventDefault();
+      event.target.blur();
+    });
+
+    els.columns.addEventListener("click", event => {
+      const tableId = event.target.dataset.selectTable;
+      if (!tableId) return;
+      selectTable(tableId);
+      document.querySelector(".canvas-shell").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
+    initializeApp();
+  </script>
+</body>
+</html>
