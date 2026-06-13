@@ -487,6 +487,14 @@
       padding: 16px;
       min-height: 560px;
       overflow: auto;
+      touch-action: none;
+      cursor: grab;
+      user-select: none;
+      overscroll-behavior: contain;
+    }
+
+    .map-wrap.is-grabbing {
+      cursor: grabbing;
     }
 
     .room-stage {
@@ -1037,8 +1045,11 @@
         height: calc(100dvh - 184px);
       }
 
+      /* Altura fija del visor para poder hacer pan dentro y aún así llegar a
+         los ajustes que quedan debajo deslizando la página. */
       .map-wrap {
-        min-height: calc(100dvh - 230px);
+        height: 58dvh;
+        min-height: 300px;
       }
 
       .panel-header h2 { font-size: 15px; }
@@ -1080,7 +1091,7 @@
         <div class="panel-header">
           <div>
             <h2>Plano 2D</h2>
-            <small>Mueve mesas, sillas ocupadas y elementos directamente en la sala.</small>
+            <small>Arrastra el fondo para desplazarte y pellizca o Ctrl/⌘+rueda para el zoom. Mueve mesas y elementos arrastrándolos.</small>
           </div>
           <div class="toolbar">
             <button id="toggleMapBtn" class="mini" type="button" title="Expandir o contraer plano">Contraer</button>
@@ -1141,6 +1152,7 @@
             <input id="zoomLevel" type="range" min="35" max="180" step="5" value="100">
             <output id="zoomValue" class="range-value">100%</output>
           </div>
+          <button id="recenterMapBtn" type="button" title="Centrar el plano en el visor">Centrar plano</button>
           <div class="field">
             <label for="rotationInput">Rotación</label>
             <input id="rotationInput" type="range" min="0" max="359" step="1" value="0">
@@ -1220,6 +1232,8 @@
       toggleMapBtn: document.getElementById("toggleMapBtn"),
       fullscreenMapBtn: document.getElementById("fullscreenMapBtn"),
       room: document.getElementById("room"),
+      mapWrap: document.querySelector(".map-wrap"),
+      recenterMapBtn: document.getElementById("recenterMapBtn"),
       roomShape: document.getElementById("roomShape"),
       roomWidth: document.getElementById("roomWidth"),
       roomHeight: document.getElementById("roomHeight"),
@@ -1780,11 +1794,114 @@
       }
     }
 
+    // Cambia el zoom del plano manteniendo fijo el punto (fx, fy) en pantalla,
+    // p. ej. el cursor o el centro de un pellizco. Usa las posiciones reales
+    // renderizadas, así funciona aunque la sala esté centrada.
+    function applyZoom(newZoom, fx, fy, save) {
+      newZoom = clamp(newZoom, 0.35, 1.8);
+      if (Math.abs(newZoom - state.room.zoom) < 0.0005) return;
+      const wrap = els.mapWrap;
+      const before = els.room.getBoundingClientRect();
+      const fxFrac = before.width ? (fx - before.left) / before.width : 0.5;
+      const fyFrac = before.height ? (fy - before.top) / before.height : 0.5;
+      state.room.zoom = newZoom;
+      renderRoom();
+      syncControls();
+      const after = els.room.getBoundingClientRect();
+      wrap.scrollLeft += (after.left + fxFrac * after.width) - fx;
+      wrap.scrollTop += (after.top + fyFrac * after.height) - fy;
+      if (save) scheduleSave();
+    }
+
+    // Navegación del plano: arrastrar el área vacía para desplazarse (ratón y
+    // dedo), pellizco para hacer zoom en móvil y Ctrl/⌘ + rueda en escritorio.
+    // El arrastre de mesas y elementos se mantiene intacto.
+    function setupMapNavigation() {
+      const wrap = els.mapWrap;
+      const pointers = new Map();
+      let pan = null;
+      let pinch = null;
+      let pinchRaf = null;
+
+      const onItem = target => !!target.closest(".map-table, .map-element");
+      const twoPointers = () => [...pointers.values()];
+      const distance = () => {
+        const [a, b] = twoPointers();
+        return Math.hypot(a.x - b.x, a.y - b.y);
+      };
+      const midpoint = () => {
+        const [a, b] = twoPointers();
+        return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      };
+
+      wrap.addEventListener("pointerdown", event => {
+        if (onItem(event.target)) return; // la mesa/elemento gestiona su arrastre
+        pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (pointers.size === 2) {
+          pan = null;
+          pinch = { startDist: distance() || 1, startZoom: state.room.zoom };
+        } else if (pointers.size === 1) {
+          pan = { id: event.pointerId, x: event.clientX, y: event.clientY, sl: wrap.scrollLeft, st: wrap.scrollTop };
+          wrap.classList.add("is-grabbing");
+          try { wrap.setPointerCapture(event.pointerId); } catch (e) {}
+        }
+      });
+
+      wrap.addEventListener("pointermove", event => {
+        if (pointers.has(event.pointerId)) {
+          pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        }
+        if (pinch && pointers.size >= 2) {
+          event.preventDefault();
+          if (!pinchRaf) {
+            pinchRaf = requestAnimationFrame(() => {
+              pinchRaf = null;
+              if (!pinch || pointers.size < 2) return;
+              const factor = distance() / pinch.startDist;
+              const m = midpoint();
+              applyZoom(pinch.startZoom * factor, m.x, m.y, false);
+            });
+          }
+          return;
+        }
+        if (pan && event.pointerId === pan.id) {
+          event.preventDefault();
+          wrap.scrollLeft = pan.sl - (event.clientX - pan.x);
+          wrap.scrollTop = pan.st - (event.clientY - pan.y);
+        }
+      });
+
+      function endPointer(event) {
+        const wasPinching = !!pinch;
+        pointers.delete(event.pointerId);
+        if (pan && event.pointerId === pan.id) {
+          pan = null;
+          wrap.classList.remove("is-grabbing");
+        }
+        if (pinch && pointers.size < 2) {
+          pinch = null;
+          if (wasPinching) scheduleSave();
+        }
+      }
+      wrap.addEventListener("pointerup", endPointer);
+      wrap.addEventListener("pointercancel", endPointer);
+
+      // Escritorio: Ctrl/⌘ + rueda hace zoom hacia el cursor. La rueda sola
+      // sigue desplazando el plano de forma nativa.
+      wrap.addEventListener("wheel", event => {
+        if (!event.ctrlKey && !event.metaKey) return;
+        event.preventDefault();
+        const factor = Math.exp(-event.deltaY * 0.0015);
+        applyZoom(state.room.zoom * factor, event.clientX, event.clientY, true);
+      }, { passive: false });
+    }
+
     async function initializeApp() {
       render();
       initializeSaveStatus();
       setupColumnNavigation();
       setupTouchDragAndDrop();
+      setupMapNavigation();
       setupMobileTabs();
       buildLoginUI();
       // Si ya hay una contraseña guardada, intentamos entrar directamente.
@@ -2496,6 +2613,12 @@
       return Math.max(min, Math.min(max, value));
     }
 
+    function recenterMap() {
+      const wrap = els.mapWrap;
+      wrap.scrollLeft = Math.max(0, (wrap.scrollWidth - wrap.clientWidth) / 2);
+      wrap.scrollTop = Math.max(0, (wrap.scrollHeight - wrap.clientHeight) / 2);
+    }
+
     function addGuest() {
       const name = prompt("Nombre del invitado");
       if (!name || !name.trim()) return;
@@ -2678,6 +2801,7 @@
     els.addTableBtn.addEventListener("click", addTable);
     els.addElementBtn.addEventListener("click", addElement);
     els.deleteElementBtn.addEventListener("click", deleteSelectedElement);
+    els.recenterMapBtn.addEventListener("click", recenterMap);
     els.toggleMapBtn.addEventListener("click", () => {
       state.mapCollapsed = !state.mapCollapsed;
       if (state.mapCollapsed) state.mapFullscreen = false;
