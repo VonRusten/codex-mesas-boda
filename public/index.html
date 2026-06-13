@@ -937,6 +937,112 @@
     body.is-touch-dragging * {
       user-select: none !important;
     }
+
+    /* ===== Navegación por pestañas en móvil ===== */
+    .mobile-tabs {
+      display: none;
+    }
+
+    @media (max-width: 820px) {
+      .mobile-tabs {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 60;
+        background: rgba(255, 255, 255, .97);
+        backdrop-filter: blur(12px);
+        border-top: 1px solid var(--line);
+        padding: 7px 10px calc(7px + env(safe-area-inset-bottom, 0px));
+        box-shadow: 0 -8px 24px rgba(41, 54, 48, .1);
+      }
+
+      .mobile-tabs button {
+        border: 1px solid transparent;
+        background: transparent;
+        min-height: 48px;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 14px;
+        color: var(--muted);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        line-height: 1.1;
+      }
+
+      .mobile-tabs button .tab-count {
+        font-size: 11px;
+        font-weight: 600;
+        opacity: .8;
+      }
+
+      .mobile-tabs button.active {
+        background: var(--panel-2);
+        color: var(--accent);
+        border-color: #cfe2d9;
+      }
+
+      body {
+        padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+      }
+
+      /* Un solo panel a la vez, controlado por la pestaña activa */
+      .layout {
+        display: block;
+        padding: 10px 10px 0;
+      }
+
+      .organizer,
+      .canvas-shell {
+        display: none;
+      }
+
+      body.m-tab-guests .organizer {
+        display: grid;
+      }
+
+      body.m-tab-plano .canvas-shell {
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* En el plano, mostramos primero el dibujo y debajo los ajustes */
+      .canvas-shell .panel-header { order: 0; }
+      .canvas-shell .map-wrap { order: 1; }
+      .canvas-shell .summary { order: 2; }
+      .canvas-shell .controls { order: 3; }
+
+      /* Ocultamos controles que no aplican con pestañas */
+      .canvas-shell .panel-header .toolbar,
+      .map-width-field {
+        display: none;
+      }
+
+      .organizer {
+        min-height: auto;
+      }
+
+      .columns {
+        height: calc(100dvh - 214px);
+        min-height: 320px;
+      }
+
+      body.topbar-compact .columns {
+        height: calc(100dvh - 184px);
+      }
+
+      .map-wrap {
+        min-height: calc(100dvh - 230px);
+      }
+
+      .panel-header h2 { font-size: 15px; }
+    }
   </style>
 </head>
 <body>
@@ -1044,7 +1150,7 @@
             <label>Seleccionado</label>
             <output id="selectedLabel" class="range-value">Plano</output>
           </div>
-          <div class="field">
+          <div class="field map-width-field">
             <label for="mapWidth">Ancho visor</label>
             <input id="mapWidth" type="range" min="420" max="1100" step="20" value="640">
             <output id="mapWidthValue" class="range-value">640 px</output>
@@ -1322,6 +1428,7 @@
       renderColumns();
       renderRoom();
       restoreColumnScrollState(scrollState);
+      updateMobileTabCounts();
     }
 
     function captureColumnScrollState() {
@@ -1379,7 +1486,7 @@
         const style = document.createElement("style");
         style.textContent = `
           .cloud-warning {
-            position: fixed; top: 0; left: 0; right: 0; z-index: 9998;
+            position: sticky; top: 0; z-index: 30;
             background: var(--warn-bg, #fff0df); color: #7a4a12;
             border-bottom: 1px solid #e6c79a; font-size: 13px;
             padding: 8px 14px; text-align: center; display: none;
@@ -1391,7 +1498,7 @@
         cloudWarnEl = document.createElement("div");
         cloudWarnEl.className = "cloud-warning";
         cloudWarnEl.innerHTML = "⚠ <b>Sin sincronización en la nube.</b> Los cambios se guardan solo en este dispositivo. Conecta la base de datos (Vercel KV / Upstash) para compartir entre dispositivos.";
-        document.body.appendChild(cloudWarnEl);
+        document.body.insertBefore(cloudWarnEl, document.body.firstChild);
       }
       cloudWarnEl.classList.toggle("show", show);
     }
@@ -1625,11 +1732,60 @@
       if (loginEls) loginEls.overlay.classList.remove("show");
     }
 
+    // Navegación por pestañas en móvil: alterna entre "Invitados" y "Plano"
+    // mostrando un panel a pantalla completa cada vez. No toca el estado guardado.
+    function setupMobileTabs() {
+      const TAB_KEY = "planificador-mesas-tab";
+      const nav = document.createElement("nav");
+      nav.className = "mobile-tabs";
+      nav.innerHTML = `
+        <button type="button" data-mtab="guests">Invitados<span class="tab-count" data-tab-count="guests"></span></button>
+        <button type="button" data-mtab="plano">Plano</button>
+      `;
+      document.body.appendChild(nav);
+
+      let current = "guests";
+      try { current = localStorage.getItem(TAB_KEY) || "guests"; } catch {}
+      if (current !== "plano") current = "guests";
+
+      function setTab(tab) {
+        current = tab === "plano" ? "plano" : "guests";
+        document.body.classList.toggle("m-tab-guests", current === "guests");
+        document.body.classList.toggle("m-tab-plano", current === "plano");
+        nav.querySelectorAll("button").forEach(button => {
+          button.classList.toggle("active", button.dataset.mtab === current);
+        });
+        try { localStorage.setItem(TAB_KEY, current); } catch {}
+        window.scrollTo({ top: 0 });
+      }
+
+      nav.addEventListener("click", event => {
+        const button = event.target.closest("[data-mtab]");
+        if (button) setTab(button.dataset.mtab);
+      });
+
+      // Al cruzar el punto de ruptura (girar el móvil, etc.) re-sincronizamos.
+      const mq = window.matchMedia("(max-width: 820px)");
+      mq.addEventListener("change", () => syncControls());
+
+      setTab(current);
+      updateMobileTabCounts();
+    }
+
+    function updateMobileTabCounts() {
+      const node = document.querySelector('[data-tab-count="guests"]');
+      if (node) {
+        const pending = unassignedGuests().length;
+        node.textContent = pending ? `${pending} sin sentar` : "todos sentados";
+      }
+    }
+
     async function initializeApp() {
       render();
       initializeSaveStatus();
       setupColumnNavigation();
       setupTouchDragAndDrop();
+      setupMobileTabs();
       buildLoginUI();
       // Si ya hay una contraseña guardada, intentamos entrar directamente.
       const ok = storedPassword() ? await loadSavedState() : false;
@@ -1880,8 +2036,11 @@
       els.rotationValue.value = selected ? `${Math.round(selected.item.rotation || 0)}°` : "0°";
       els.selectedLabel.value = selected ? selected.label : "Plano";
       els.deleteElementBtn.disabled = !state.selectedElementId;
-      els.layout.classList.toggle("map-collapsed", state.mapCollapsed);
-      els.layout.classList.toggle("map-fullscreen", state.mapFullscreen);
+      // En móvil mandan las pestañas: ignoramos colapso/pantalla completa para
+      // que no distorsionen el layout de un panel a pantalla completa.
+      const isMobile = window.matchMedia("(max-width: 820px)").matches;
+      els.layout.classList.toggle("map-collapsed", state.mapCollapsed && !isMobile);
+      els.layout.classList.toggle("map-fullscreen", state.mapFullscreen && !isMobile);
       els.layout.style.setProperty("--map-panel-width", `${state.mapPanelWidth}px`);
       els.toggleMapBtn.textContent = state.mapCollapsed ? "Expandir" : "Contraer";
       els.toggleMapBtn.title = state.mapCollapsed ? "Expandir plano 2D" : "Contraer plano 2D";
