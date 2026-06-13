@@ -1,26 +1,14 @@
-import {
-  isConfigured,
-  readState,
-  writeState,
-  readRawKey,
-  writeRawKey,
-  STATE_KEY,
-} from "../lib/kv.js";
+import { isConfigured, readState, writeState } from "../lib/kv.js";
 import { isAuthorized, unauthorized } from "../lib/auth.js";
 import seedState from "../lib/datos-iniciales.js";
 
-const SEED_FLAG_KEY = `${STATE_KEY}:seeded`;
-
-// Siembra la base de datos en la nube con los datos reales una sola vez.
-// Devuelve el estado a usar (el sembrado o el ya existente).
+// Devuelve el estado a usar. Si la base de datos está vacía (primera vez, o una
+// siembra anterior que no llegó a persistir), la siembra con los datos reales.
+// Si ya hay datos válidos, los respeta y NUNCA los sobrescribe.
 async function ensureSeeded() {
-  const alreadySeeded = await readRawKey(SEED_FLAG_KEY);
-  if (alreadySeeded) {
-    return await readState();
-  }
-  // Primera vez: volcamos los datos reales y marcamos como sembrado.
+  const existing = await readState();
+  if (existing) return existing;
   await writeState(seedState);
-  await writeRawKey(SEED_FLAG_KEY, new Date().toISOString());
   return seedState;
 }
 

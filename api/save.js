@@ -1,6 +1,21 @@
 import { isConfigured, writeState } from "../lib/kv.js";
 import { isAuthorized, unauthorized } from "../lib/auth.js";
 
+// Lee y parsea el cuerpo de la petición de forma robusta: en algunas
+// configuraciones de Vercel (funciones ESM) req.body no viene parseado, así que
+// caemos a leer el stream manualmente.
+async function readJsonBody(req) {
+  if (req.body !== undefined && req.body !== null && req.body !== "") {
+    return typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+  }
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+  }
+  const raw = Buffer.concat(chunks).toString("utf8");
+  return raw ? JSON.parse(raw) : null;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ ok: false, error: "Método no permitido" });
@@ -20,11 +35,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // El body puede llegar ya parseado (Vercel) o como string crudo.
-    let state = req.body;
-    if (typeof state === "string") {
-      state = JSON.parse(state);
-    }
+    const state = await readJsonBody(req);
     if (!state || typeof state !== "object") {
       throw new Error("Cuerpo de la petición inválido");
     }
