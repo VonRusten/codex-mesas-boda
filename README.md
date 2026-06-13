@@ -40,7 +40,16 @@ Este repositorio ya contiene todo. Solo necesitas que esté en GitHub (ya lo est
 En este punto la app **ya funciona**: cada navegador guarda su propio plano. Para
 que el plano se **comparta entre personas**, conecta la base de datos (paso 3).
 
-### 3. Conecta el almacenamiento compartido (Vercel KV / Upstash)
+### 3. Conecta el almacenamiento compartido (Vercel KV / Upstash) — IMPRESCINDIBLE para sincronizar
+
+> **Sin este paso NO hay sincronización entre dispositivos.** Cada navegador
+> guardaría sus datos por separado (modo local) y verías un aviso amarillo en la
+> parte superior de la app.
+>
+> Para comprobar si está conectado, abre `https://TU-APP.vercel.app/api/status`:
+> - `"cloud": true` → sincroniza entre dispositivos. ✅
+> - `"cloud": false` → falta conectar el almacén (sigue los pasos de abajo). ⚠️
+
 1. En tu proyecto de Vercel ve a la pestaña **Storage**.
 2. **Create Database / Connect Store** → elige **Upstash for Redis** (KV).
    Tiene un plan gratuito de sobra para esta app.

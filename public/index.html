@@ -1271,6 +1271,30 @@
       return pw ? { "x-planner-password": pw } : {};
     }
 
+    // ---- Aviso de modo local (sin sincronización en la nube) ----
+    let cloudWarnEl = null;
+    function setCloudWarning(show) {
+      if (!cloudWarnEl) {
+        const style = document.createElement("style");
+        style.textContent = `
+          .cloud-warning {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 9998;
+            background: var(--warn-bg, #fff0df); color: #7a4a12;
+            border-bottom: 1px solid #e6c79a; font-size: 13px;
+            padding: 8px 14px; text-align: center; display: none;
+          }
+          .cloud-warning.show { display: block; }
+          .cloud-warning b { color: #8a3b0f; }
+        `;
+        document.head.appendChild(style);
+        cloudWarnEl = document.createElement("div");
+        cloudWarnEl.className = "cloud-warning";
+        cloudWarnEl.innerHTML = "⚠ <b>Sin sincronización en la nube.</b> Los cambios se guardan solo en este dispositivo. Conecta la base de datos (Vercel KV / Upstash) para compartir entre dispositivos.";
+        document.body.appendChild(cloudWarnEl);
+      }
+      cloudWarnEl.classList.toggle("show", show);
+    }
+
     function serializableState() {
       return {
         guests: state.guests,
@@ -1346,6 +1370,7 @@
 
         if (result.configured === false) {
           cloudEnabled = false;
+          setCloudWarning(true);
           els.saveStatus.value = "Guardado en este equipo";
           return;
         }
@@ -1373,6 +1398,7 @@
           // Sin nube: priorizamos lo guardado en este navegador y, si no hay
           // nada, usamos los datos iniciales que manda el servidor.
           cloudEnabled = false;
+          setCloudWarning(true);
           if (applyLoadedState(readFromLocalStorage())) {
             render();
             els.saveStatus.value = "Datos de este equipo";
@@ -1387,6 +1413,7 @@
         }
 
         cloudEnabled = true;
+        setCloudWarning(false);
         if (result.exists && applyLoadedState(result.state)) {
           render();
           saveToLocalStorage();
