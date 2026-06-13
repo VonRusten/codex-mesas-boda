@@ -343,6 +343,13 @@
       white-space: nowrap;
     }
 
+    .column-title-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
     .mini {
       min-height: 28px;
       padding: 0 8px;
@@ -380,16 +387,42 @@
     }
 
     .guest-card {
+      position: relative;
       background: var(--panel);
       border: 1px solid var(--line);
       border-left: 4px solid var(--accent);
       border-radius: 7px;
-      padding: 9px 10px;
+      padding: 9px 28px 9px 10px;
       min-height: 46px;
       display: grid;
       gap: 4px;
       cursor: grab;
       box-shadow: 0 4px 12px rgba(37, 48, 44, .06);
+    }
+
+    .guest-del {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 22px;
+      min-height: 22px;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1;
+      font-weight: 700;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+    }
+
+    .guest-del:hover {
+      border-color: var(--danger);
+      background: var(--warn-bg, #fff);
+      color: var(--danger);
     }
 
     .guest-card:active {
@@ -486,6 +519,10 @@
     .map-wrap {
       padding: 16px;
       min-height: 560px;
+      /* Acotamos la altura del visor para que el contenido más alto que la
+         ventana se pueda recorrer hacia abajo dentro del plano (igual que el
+         desplazamiento lateral), en lugar de estirar toda la página. */
+      max-height: calc(100vh - 170px);
       overflow: auto;
       touch-action: none;
       cursor: grab;
@@ -1143,6 +1180,7 @@
           </div>
         <button id="addElementBtn" type="button" title="Añadir elemento">+ Elemento</button>
         <button id="deleteElementBtn" type="button" title="Borrar elemento seleccionado">Borrar elemento</button>
+        <button id="deleteTableBtn" type="button" title="Borrar la mesa seleccionada">Borrar mesa</button>
           <div class="field">
             <label>Guardado</label>
             <output id="saveStatus" class="range-value">Sin conectar</output>
@@ -1250,6 +1288,7 @@
       elementType: document.getElementById("elementType"),
       addElementBtn: document.getElementById("addElementBtn"),
       deleteElementBtn: document.getElementById("deleteElementBtn"),
+      deleteTableBtn: document.getElementById("deleteTableBtn"),
       summary: document.getElementById("summary"),
       toast: document.getElementById("toast")
     };
@@ -2007,6 +2046,7 @@
       document.addEventListener("pointerdown", event => {
         if (event.pointerType === "mouse") return; // el ratón usa el drag nativo
         if (drag) return;
+        if (event.target.closest("button")) return; // los botones (p. ej. eliminar) no arrastran
         const source = event.target.closest("[data-guest-id]");
         if (!source || !source.dataset.guestId) return;
         lastX = event.clientX;
@@ -2153,6 +2193,7 @@
       els.rotationValue.value = selected ? `${Math.round(selected.item.rotation || 0)}°` : "0°";
       els.selectedLabel.value = selected ? selected.label : "Plano";
       els.deleteElementBtn.disabled = !state.selectedElementId;
+      els.deleteTableBtn.disabled = !state.selectedTableId;
       // En móvil mandan las pestañas: ignoramos colapso/pantalla completa para
       // que no distorsionen el layout de un panel a pantalla completa.
       const isMobile = window.matchMedia("(max-width: 820px)").matches;
@@ -2227,7 +2268,10 @@
         <div class="column-head">
           <div class="column-title">
             <strong title="${escapeAttr(table.name)}">${escapeHtml(table.name)}</strong>
-            <button class="mini" type="button" data-select-table="${table.id}" title="Seleccionar mesa">Ver</button>
+            <div class="column-title-actions">
+              <button class="mini" type="button" data-select-table="${table.id}" title="Seleccionar mesa">Ver</button>
+              <button class="mini" type="button" data-delete-table="${table.id}" title="Eliminar mesa">Borrar</button>
+            </div>
           </div>
           <div class="table-controls">
             <input class="table-name-input" data-table-name="${table.id}" value="${escapeAttr(table.name)}" title="Nombre de la mesa" placeholder="Nombre de la mesa">
@@ -2277,6 +2321,7 @@
       card.innerHTML = `
         <div class="guest-name">${escapeHtml(guest.name)}</div>
         ${guest.allergy ? `<div class="guest-meta">Alergia: ${escapeHtml(guest.allergy)}</div>` : `<div class="guest-meta">Sin alergias registradas</div>`}
+        <button class="guest-del" type="button" draggable="false" data-del-guest="${guest.id}" title="Eliminar invitado" aria-label="Eliminar invitado">×</button>
       `;
       card.addEventListener("dragstart", event => {
         state.draggedGuestId = guest.id;
@@ -2692,6 +2737,40 @@
       scheduleSave();
     }
 
+    function deleteTable(tableId) {
+      const table = tableById(tableId);
+      if (!table) return;
+      const seated = table.seats.filter(Boolean).length;
+      const message = seated
+        ? `¿Eliminar "${table.name}"? Sus ${seated} invitado(s) volverán a "Sin asignar".`
+        : `¿Eliminar "${table.name}"?`;
+      if (!confirm(message)) return;
+      state.tables = state.tables.filter(item => item.id !== tableId);
+      if (state.selectedTableId === tableId) state.selectedTableId = null;
+      showToast(`${table.name} eliminada.`);
+      render();
+      scheduleSave();
+    }
+
+    function deleteSelectedTable() {
+      if (!state.selectedTableId) {
+        showToast("Selecciona una mesa del plano para borrarla.");
+        return;
+      }
+      deleteTable(state.selectedTableId);
+    }
+
+    function deleteGuest(guestId) {
+      const guest = guestById(guestId);
+      if (!guest) return;
+      if (!confirm(`¿Eliminar a "${guest.name}" de la lista de invitados?`)) return;
+      removeGuestFromSeats(guestId);
+      state.guests = state.guests.filter(item => item.id !== guestId);
+      showToast(`${guest.name} eliminado.`);
+      render();
+      scheduleSave();
+    }
+
     function clearAssignments() {
       state.tables.forEach(table => table.seats = Array.from({ length: table.capacity }, () => null));
       render();
@@ -2801,6 +2880,7 @@
     els.addTableBtn.addEventListener("click", addTable);
     els.addElementBtn.addEventListener("click", addElement);
     els.deleteElementBtn.addEventListener("click", deleteSelectedElement);
+    els.deleteTableBtn.addEventListener("click", deleteSelectedTable);
     els.recenterMapBtn.addEventListener("click", recenterMap);
     els.toggleMapBtn.addEventListener("click", () => {
       state.mapCollapsed = !state.mapCollapsed;
@@ -2905,6 +2985,16 @@
     });
 
     els.columns.addEventListener("click", event => {
+      const delGuestId = event.target.dataset.delGuest;
+      if (delGuestId) {
+        deleteGuest(delGuestId);
+        return;
+      }
+      const delTableId = event.target.dataset.deleteTable;
+      if (delTableId) {
+        deleteTable(delTableId);
+        return;
+      }
       const tableId = event.target.dataset.selectTable;
       if (!tableId) return;
       selectTable(tableId);
