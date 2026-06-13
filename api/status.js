@@ -1,4 +1,4 @@
-import { isConfigured, readState } from "../lib/kv.js";
+import { isConfigured, readState, detectedEnvNames } from "../lib/kv.js";
 
 // Diagnóstico público (sin contraseña y sin exponer secretos): indica si la base
 // de datos en la nube está conectada y si tiene datos guardados. Sirve para
@@ -19,6 +19,9 @@ export default async function handler(req, res) {
     ok: true,
     cloud, // true = sincroniza entre dispositivos; false = solo en cada navegador
     hasData,
+    // Solo nombres de variables, nunca valores. Ayuda a diagnosticar si Vercel
+    // inyectó las credenciales con algún prefijo.
+    envVars: detectedEnvNames(),
     ...(error ? { error } : {}),
     hint: cloud
       ? "La base de datos en la nube está conectada. Los cambios se comparten entre dispositivos."
